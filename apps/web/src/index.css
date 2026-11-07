@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-50: oklch(96.2% 0.018 272.314);
+  --color-brand-100: oklch(93% 0.034 272.788);
+  --color-brand-200: oklch(87% 0.065 274.039);
+  --color-brand-500: oklch(58.5% 0.233 277.117);
+  --color-brand-600: oklch(51.1% 0.262 276.966);
+  --color-brand-700: oklch(45.7% 0.24 277.023);
+  --color-brand-900: oklch(35.9% 0.144 278.697);
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+}
+
+/*
+ * Printing: the app's menu and header (and anything marked .no-print) are left out, and colors
+ * are kept. Receipts are printed from their exported image instead (see lib/print.ts).
+ */
+@media print {
+  html,
+  body {
+    background: #fff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
