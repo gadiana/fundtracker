@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { prisma } from '../src/db';
-import { Client, createAy, expectStatus, registerAndLogin, resetDb, signupBody, superadminClient } from './helpers';
+import { Client, createAy, expectStatus, PASSWORD, registerAndLogin, resetDb, signupBody, tokenFromMail } from './helpers';
 
 let ayId: string;
 let collectorId: string;
@@ -13,15 +13,15 @@ beforeEach(async () => {
 });
 
 describe('audit log', () => {
-  it('records signup, login and approval with before/after snapshots, shown in full only to the superadmin', async () => {
+  it('records signup, login and approval with before/after snapshots, shown in full to the adviser only', async () => {
     const adviser = await registerAndLogin('adviser@test.ph');
     const c = await Client.create();
     expectStatus(await c.post('/auth/signup', signupBody('staff@test.ph', 'Carla', 'Reyes')), 201);
+    const staffToken = tokenFromMail('staff@test.ph');
     const [pending] = (await adviser.get('/members?status=pending')).body.items;
     expectStatus(await adviser.post(`/members/${pending.id}/approve`, { designationId: collectorId }), 200);
 
-    const superadmin = await superadminClient();
-    const full = expectStatus(await superadmin.get(`/admin/audit?pageSize=100&ayId=${ayId}`), 200).body;
+    const full = expectStatus(await adviser.get('/audit?pageSize=100'), 200).body;
     const actions = full.items.map((i: { action: string }) => i.action);
     expect(actions).toEqual(expect.arrayContaining(['signup', 'verify_email', 'login', 'approve']));
     const approve = full.items.find((i: { action: string }) => i.action === 'approve');
@@ -30,11 +30,17 @@ describe('audit log', () => {
     expect(approve.actorName).toBe('Test User');
     expect(approve.actorDesignation).toBe('Adviser');
 
-    // the adviser sees only staff and student activity, in words, with no codes
-    const simple = expectStatus(await adviser.get('/audit?pageSize=100'), 200).body;
-    expect(simple.items.map((i: { summary: string }) => i.summary)).toEqual(['Approved Carla Reyes as Collector', 'Carla Reyes signed up', 'Test User signed up']);
-    expect(JSON.stringify(simple)).not.toMatch(/"before"|"after"|ipAddress|"action"|login/);
-    expect((await adviser.get('/admin/audit')).body.error.code).toBe('SUPERADMIN_ONLY');
+    expect(approve).toMatchObject({ entityType: 'user_ay_role', ipAddress: expect.any(String) });
+    expect(full.items.every((i: { device: string | null }) => i.device === null || typeof i.device === 'string')).toBe(true);
+
+    const filters = expectStatus(await adviser.get('/audit/filters'), 200).body;
+    expect(filters.actions).toEqual(expect.arrayContaining(['approve', 'login', 'signup']));
+    expect(expectStatus(await adviser.get('/audit?action=approve'), 200).body.items).toHaveLength(1);
+
+    // officers don't see the log
+    expectStatus(await c.post('/auth/verify-email', { token: staffToken }), 200);
+    expectStatus(await c.post('/auth/login', { email: 'staff@test.ph', password: PASSWORD }), 200);
+    expect((await c.get('/audit')).status).toBe(403);
   });
 
   it('never stores passwords or tokens', async () => {
