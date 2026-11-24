@@ -1,7 +1,11 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { rmSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { BRANDING } from '../src/branding';
 import { prisma } from '../src/db';
+import { applyBranding } from '../src/lib/branding';
 import { createProgram, createStudent } from './fixtures';
-import { Client, createAy, expectStatus, pngBuffer, registerAndLogin, resetDb, signupBody, superadminClient, type Client as ClientType } from './helpers';
+import { Client, createAy, expectStatus, pngBuffer, registerAndLogin, resetDb, signupBody, type Client as ClientType } from './helpers';
 
 let ayId: string;
 let collectorId: string;
@@ -45,16 +49,11 @@ describe('settings', () => {
     expect(await prisma.auditLog.count({ where: { action: 'settings_change' } })).toBe(1);
   });
 
-  it('leave the organization’s name, description and logos to the superadmin', async () => {
-    expect((await adviser.patch('/settings', { schoolAbbr: 'SSU' })).body.error.code).toBe('SUPERADMIN_ONLY');
-    expect((await adviser.upload('/admin/branding/' + ayId + '/logo?kind=org', pngBuffer(), 'logo.png')).body.error.code).toBe('SUPERADMIN_ONLY');
-
-    const superadmin = await superadminClient();
-    const res = expectStatus(await superadmin.patch(`/admin/branding/${ayId}`, { schoolAbbr: 'SSU', orgName: 'Sample Student Organization' }), 200);
-    expect(res.body).toMatchObject({ schoolAbbr: 'SSU' });
-    // only branding fields are accepted there
-    expect((await superadmin.patch(`/admin/branding/${ayId}`, { allocationMode: 'staff_chooses' })).status).toBe(400);
-    expect((await adviser.get('/settings')).body.schoolAbbr).toBe('SSU');
+  it('leave the organization’s name and logos to the code', async () => {
+    expect((await adviser.patch('/settings', { schoolAbbr: 'SSU' })).body.error.code).toBe('SET_IN_CODE');
+    expect((await adviser.patch('/settings', { orgName: 'Another Name' })).body.error.code).toBe('SET_IN_CODE');
+    // sending the current value along with other changes is fine
+    expectStatus(await adviser.patch('/settings', { orgName: 'Sample Student Organization', receiptFooterText: 'Thanks' }), 200);
   });
 
   it('validates values and rejects unknown fields', async () => {
@@ -100,43 +99,39 @@ describe('settings', () => {
   });
 });
 
-describe('logo upload (superadmin)', () => {
-  let superadmin: ClientType;
-  beforeEach(async () => {
-    superadmin = await superadminClient();
+describe('branding set in the code', () => {
+  const dir = resolve(process.cwd(), 'branding');
+  const saved = { ...BRANDING };
+  afterEach(() => {
+    Object.assign(BRANDING, saved);
+    rmSync(join(dir, 'test-logo.png'), { force: true });
   });
 
-  it('stores a real image under a random name and serves it publicly', async () => {
-    const res = expectStatus(await superadmin.upload(`/admin/branding/${ayId}/logo?kind=org`, pngBuffer(), '../../evil name.png'), 200);
-    expect(res.body.logoUrl).toMatch(new RegExp(`^/api/public/ays/${ayId}/logo`));
+  it('copies the names and logos from src/branding.ts into every year, storing a logo again only when it changes', async () => {
+    const closed = (await createAy(2025, { current: false, closed: true })).ay.id;
+    writeFileSync(join(dir, 'test-logo.png'), pngBuffer());
+    Object.assign(BRANDING, { orgName: 'Code Org', orgAbbr: 'CO', schoolName: 'Code University', logo: 'test-logo.png', receiptLogo: '' });
+    await applyBranding();
 
-    const file = await prisma.storedFile.findFirstOrThrow();
-    expect(file.mimeType).toBe('image/png');
-    expect(file.storageKey).toMatch(new RegExp(`^${ayId}/\\d{4}/[0-9a-f-]{36}\\.png$`));
-    // the path is stripped; the stored file always gets a random name
-    expect(file.originalName).toBe('evil name.png');
+    for (const id of [ayId, closed]) {
+      const s = await prisma.aySetting.findUniqueOrThrow({ where: { academicYearId: id }, include: { logoFile: true } });
+      expect(s).toMatchObject({ orgName: 'Code Org', orgAbbr: 'CO', schoolName: 'Code University', receiptLogoFileId: null, updatedByName: 'System (branding)' });
+      expect(s.logoFile).toMatchObject({ mimeType: 'image/png', academicYearId: id });
+    }
+    const info = (await (await Client.create()).get('/public/info')).body;
+    expect(info.org).toMatchObject({ name: 'Code Org', logoUrl: expect.stringContaining('/logo') });
 
-    const anon = await Client.create();
-    const img = await anon.agent.get(res.body.logoUrl);
-    expect(img.status).toBe(200);
-    expect(img.headers['content-type']).toBe('image/png');
-    expect(img.headers['x-content-type-options']).toBe('nosniff');
-    // the public info for the login page includes it
-    expect((await anon.get('/public/info')).body.org.logoUrl).toBe(res.body.logoUrl);
-  });
+    // the same image is not stored again; a changed one is
+    await applyBranding();
+    expect(await prisma.storedFile.count()).toBe(2);
+    writeFileSync(join(dir, 'test-logo.png'), pngBuffer(4096));
+    await applyBranding(ayId);
+    expect(await prisma.storedFile.count()).toBe(3);
 
-  it('rejects files whose content is not an allowed image, whatever their name', async () => {
-    const res = await superadmin.upload(`/admin/branding/${ayId}/logo?kind=org`, Buffer.from('<script>alert(1)</script>'), 'logo.png');
-    expect(res.body.error.code).toBe('FILE_TYPE');
-    const pdf = await superadmin.upload(`/admin/branding/${ayId}/logo?kind=org`, Buffer.from('%PDF-1.7 fake'), 'logo.png');
-    expect(pdf.body.error.code).toBe('FILE_TYPE');
-    expect(await prisma.storedFile.count()).toBe(0);
-  });
-
-  it('enforces the maximum upload size', async () => {
-    expectStatus(await adviser.patch('/settings', { uploadMaxBytes: 102_400 }), 200);
-    const res = await superadmin.upload(`/admin/branding/${ayId}/logo?kind=org`, pngBuffer(200_000), 'big.png');
-    expect(res.status).toBe(413);
+    // no logo in the code: none in the app
+    BRANDING.logo = '';
+    await applyBranding();
+    expect((await prisma.aySetting.findUniqueOrThrow({ where: { academicYearId: ayId } })).logoFileId).toBeNull();
   });
 });
 

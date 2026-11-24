@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { AcademicYear } from '@prisma/client';
+import { BRANDING } from '../src/branding';
 import { prisma } from '../src/db';
 import { createFund, createProgram, createSection, createStudent, recordCollection } from './fixtures';
 import { createAy, createEmptyAy, expectStatus, registerAndLogin, resetDb, type Client } from './helpers';
@@ -129,7 +130,8 @@ describe('Copy Wizard', () => {
 
     const T = target.id;
     // settings and structure, re-created inside the new AY
-    expect((await prisma.aySetting.findUniqueOrThrow({ where: { academicYearId: T } })).schoolAbbr).toBe('SSU');
+    // the settings are copied, but the organization's names always come from src/branding.ts
+    expect(await prisma.aySetting.findUniqueOrThrow({ where: { academicYearId: T } })).toMatchObject({ orgName: BRANDING.orgName, schoolAbbr: BRANDING.schoolAbbr });
     const targetBsit = await prisma.program.findFirstOrThrow({ where: { academicYearId: T, code: 'BSIT' } });
     expect(targetBsit.id).not.toBe(bsit.id);
     expect(await prisma.section.count({ where: { academicYearId: T } })).toBe(1);
