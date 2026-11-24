@@ -7,7 +7,6 @@ import { config, isProd } from './config';
 import { apiNotFound, errorHandler } from './lib/http';
 import { csrfProtection, issueCsrfToken } from './middleware/csrf';
 import { apiLimiter } from './middleware/rate-limit';
-import { adminRouter } from './modules/admin/routes';
 import { auditRouter } from './modules/audit/routes';
 import { authRouter } from './modules/auth/routes';
 import { aysRouter } from './modules/ays/routes';
@@ -97,7 +96,6 @@ export function createApp() {
   app.use('/api/students', studentsRouter);
   app.use('/api/enrollment-links', enrollmentLinksRouter);
   app.use('/api/audit', auditRouter);
-  app.use('/api/admin', adminRouter);
   app.use('/api/notifications', notificationsRouter);
   app.use('/api/dashboard', dashboardRouter);
   app.use('/api/history', historyRouter);

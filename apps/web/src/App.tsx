@@ -26,12 +26,9 @@ function page<K extends string>(load: () => Promise<Record<K, ComponentType>>, n
 }
 
 const AcademicYearsPage = page(() => import('./pages/AcademicYears'), 'AcademicYearsPage');
-const AdminActivityPage = page(() => import('./pages/admin/ActivityPage'), 'ActivityPage');
-const AdminAdvisersPage = page(() => import('./pages/admin/AdvisersPage'), 'AdvisersPage');
-const AdminOrganizationPage = page(() => import('./pages/admin/OrganizationPage'), 'OrganizationPage');
-const AdminSystemLogPage = page(() => import('./pages/admin/SystemLogPage'), 'SystemLogPage');
 const AuditLogPage = page(() => import('./pages/AuditLog'), 'AuditLogPage');
 const CollectionPage = page(() => import('./pages/CollectionPage'), 'CollectionPage');
+const SignInActivityPage = page(() => import('./pages/SignInActivity'), 'SignInActivityPage');
 const DashboardPage = page(() => import('./pages/Dashboard'), 'DashboardPage');
 const EnrollPage = page(() => import('./pages/Enroll'), 'EnrollPage');
 const FundDetailPage = page(() => import('./pages/funds/FundDetailPage'), 'FundDetailPage');
@@ -87,18 +84,6 @@ function RequirePermission({ permission, children }: { permission: Permission; c
   return children;
 }
 
-function RequireSuperadmin({ children }: { children: ReactNode }) {
-  const { me } = useAuth();
-  if (!me?.user.isSuperadmin) {
-    return (
-      <Card>
-        <EmptyState icon={ShieldAlert} title="You don't have access to this page" body="Only the superadmin can open it." />
-      </Card>
-    );
-  }
-  return children;
-}
-
 function NotFound() {
   return (
     <div className="grid min-h-dvh place-items-center p-4">
@@ -148,14 +133,11 @@ const router = createBrowserRouter([
       { path: 'academic-years', element: <RequirePermission permission="manage"><AcademicYearsPage /></RequirePermission> },
       { path: 'settings', element: <RequirePermission permission="manage"><SettingsPage /></RequirePermission> },
       { path: 'audit', element: <RequirePermission permission="manage"><AuditLogPage /></RequirePermission> },
+      { path: 'activity', element: <RequirePermission permission="manage"><SignInActivityPage /></RequirePermission> },
       { path: 'history', element: <HistoryPage /> },
       { path: 'reports', element: <ReportsPage /> },
       { path: 'notifications', element: <NotificationsPage /> },
       { path: 'profile', element: <ProfilePage /> },
-      { path: 'admin/activity', element: <RequireSuperadmin><AdminActivityPage /></RequireSuperadmin> },
-      { path: 'admin/advisers', element: <RequireSuperadmin><AdminAdvisersPage /></RequireSuperadmin> },
-      { path: 'admin/organization', element: <RequireSuperadmin><AdminOrganizationPage /></RequireSuperadmin> },
-      { path: 'admin/logs', element: <RequireSuperadmin><AdminSystemLogPage /></RequireSuperadmin> },
     ],
   },
   { path: '*', element: <NotFound /> },

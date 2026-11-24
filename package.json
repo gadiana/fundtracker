@@ -14,8 +14,7 @@
     "test": "npm run test -w @sft/api",
     "db:migrate": "npm run db:migrate -w @sft/api",
     "db:seed": "npm run db:seed -w @sft/api",
-    "db:reset": "npm run db:reset -w @sft/api",
-    "superadmin": "npm run superadmin -w @sft/api"
+    "db:reset": "npm run db:reset -w @sft/api"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

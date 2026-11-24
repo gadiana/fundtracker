@@ -193,10 +193,6 @@ model User {
   avatarUpdatedAt       DateTime?  @map("avatar_updated_at") @db.Timestamptz(6)
   status                UserStatus @default(active)
   /// system-wide: manages advisers, the organization's branding, full logs and sign-in activity.
-  /// Created only with the create-superadmin command, never by signing up.
-  isSuperadmin          Boolean    @default(false) @map("is_superadmin")
-  /// set when the superadmin creates the account with a starting password
-  mustChangePassword    Boolean    @default(false) @map("must_change_password")
   emailVerifiedAt       DateTime?  @map("email_verified_at") @db.Timestamptz(6)
   privacyConsentAt      DateTime?  @map("privacy_consent_at") @db.Timestamptz(6)
   privacyConsentVersion String?    @map("privacy_consent_version") @db.VarChar(20)
