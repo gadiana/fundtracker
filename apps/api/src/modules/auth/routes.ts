@@ -15,6 +15,7 @@ import { config } from '../../config';
 import { prisma } from '../../db';
 import { writeAudit } from '../../lib/audit';
 import { hashPassword, randomToken, sha256, verifyDummyPassword, verifyPassword } from '../../lib/crypto';
+import { COUNTER_KEYS } from '../../lib/defaults';
 import { sendEvent } from '../../lib/events';
 import { decryptSecret, useRecoveryCode, verifyTotp } from '../../lib/totp';
 import { badRequest, conflict, forbidden, HttpError, unauthorized } from '../../lib/http';
@@ -84,12 +85,39 @@ const userSnapshot = (u: User) => ({
 
 // ───────────── signup ─────────────
 
+/** The school year that is running now (they start in June, Philippine time). */
+function currentSchoolStartYear(now = new Date()) {
+  const [year, month] = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit' }).format(now).split('-').map(Number);
+  return month! >= 6 ? year! : year! - 1;
+}
+
+/**
+ * On a brand-new installation there is no academic year yet: the very first sign-up creates the
+ * current one, and joins it as its adviser (who then sets it up). Returns null when years exist but
+ * none is current (the adviser chooses one under Academic years).
+ */
+async function currentOrFirstAy() {
+  const current = await getCurrentAy();
+  if (current || (await prisma.academicYear.count()) > 0) return current;
+  const startYear = currentSchoolStartYear();
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const ay = await tx.academicYear.create({ data: { startYear, endYear: startYear + 1, label: `${startYear}-${startYear + 1}`, isCurrent: true } });
+      await tx.ayCounter.createMany({ data: COUNTER_KEYS.map((counterKey) => ({ academicYearId: ay.id, counterKey })) });
+      return ay;
+    });
+  } catch {
+    // someone else's first sign-up created it at the same moment
+    return getCurrentAy();
+  }
+}
+
 authRouter.post('/signup', signupLimiter, async (req, res) => {
   const body = signupSchema.parse(req.body);
 
-  const ay = await getCurrentAy();
+  const ay = await currentOrFirstAy();
   if (!ay) {
-    throw new HttpError(503, 'NOT_INITIALIZED', 'No current academic year is set up yet. Run the database seed first.');
+    throw new HttpError(503, 'NOT_INITIALIZED', 'No academic year is open for sign-ups yet. Ask the adviser to set the current academic year.');
   }
   if (ay.status === 'closed') throw conflict('AY_CLOSED', `AY ${ay.label} is closed. Signups are not accepted.`);
 
@@ -116,7 +144,7 @@ authRouter.post('/signup', signupLimiter, async (req, res) => {
         privacyConsentVersion: settings?.privacyConsentVersion ?? '1',
       },
     });
-    const membership = await joinAcademicYear(tx, user.id, ay.id);
+    const membership = await joinAcademicYear(tx, user.id, ay.id, { canBecomeAdviser: true });
     await writeAudit(tx, {
       ayId: ay.id,
       actor: { id: user.id, name: formatPersonName(user) },

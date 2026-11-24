@@ -2,7 +2,6 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { createApp } from '../src/app';
 import { prisma } from '../src/db';
-import { hashPassword } from '../src/lib/crypto';
 import { mailTestControls, sentMail } from '../src/lib/mailer';
 import { invalidateSecurityCache } from '../src/lib/settings';
 
@@ -119,35 +118,13 @@ export function expectStatus(res: Response, status: number) {
 }
 
 /**
- * Sign up, verify the email link, and log in. Returns a logged-in client.
- * Signing up only ever asks to join; as a shortcut for the tests, the first account in an AY
- * that has no adviser is made its adviser (what the superadmin would do).
+ * Sign up, verify the email link, and log in. Returns a logged-in client. The first account in
+ * the current AY becomes its adviser; later ones wait for approval.
  */
 export async function registerAndLogin(email: string, ayId?: string, names: [string, string] = ['Test', 'User']) {
   const c = await Client.create(ayId);
   expectStatus(await c.post('/auth/signup', signupBody(email, ...names)), 201);
   expectStatus(await c.post('/auth/verify-email', { token: tokenFromMail(email) }), 200);
-  await makeAdviserIfNone(email);
-  expectStatus(await c.post('/auth/login', { email, password: PASSWORD }), 200);
-  return c;
-}
-
-export async function makeAdviserIfNone(email: string) {
-  const pending = await prisma.userAyRole.findMany({ where: { user: { email }, status: 'pending' } });
-  for (const m of pending) {
-    const hasAdviser = await prisma.userAyRole.count({ where: { academicYearId: m.academicYearId, role: 'adviser', status: 'active' } });
-    if (!hasAdviser) {
-      await prisma.userAyRole.update({ where: { id: m.id }, data: { role: 'adviser', status: 'active', decidedAt: new Date(), decidedByName: 'Superadmin (test)' } });
-    }
-  }
-}
-
-/** A superadmin account, logged in. */
-export async function superadminClient(email = 'super@example.com') {
-  await prisma.user.create({
-    data: { email, firstName: 'Sofia', lastName: 'Super', passwordHash: await hashPassword(PASSWORD), isSuperadmin: true, emailVerifiedAt: new Date() },
-  });
-  const c = await Client.create();
   expectStatus(await c.post('/auth/login', { email, password: PASSWORD }), 200);
   return c;
 }
