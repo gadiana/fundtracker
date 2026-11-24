@@ -107,7 +107,5 @@ export const settingsPatchSchema = z
 
 export type SettingsPatch = z.input<typeof settingsPatchSchema>;
 
-/** The organization's name and description fields: only the superadmin changes these (and the logos). */
+/** The organization's name fields: set in the code (apps/api/src/branding.ts), not in the app. */
 export const BRANDING_KEYS = ['schoolName', 'schoolAbbr', 'collegeName', 'collegeAbbr', 'orgName', 'orgAbbr', 'programName', 'programAbbr'] as const;
-export const brandingPatchSchema = settingsPatchSchema.pick(Object.fromEntries(BRANDING_KEYS.map((k) => [k, true])) as { [K in (typeof BRANDING_KEYS)[number]]: true });
-export type BrandingPatch = z.input<typeof brandingPatchSchema>;
