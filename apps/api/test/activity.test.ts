@@ -1,14 +1,15 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { prisma } from '../src/db';
 import { describeDevice, visitEnd } from '../src/lib/presence';
-import { createAy, expectStatus, registerAndLogin, resetDb, superadminClient, type Client } from './helpers';
+import { createAy, expectStatus, registerAndLogin, resetDb, type Client } from './helpers';
 
 let adviser: Client;
+let ayId: string;
 
 beforeEach(async () => {
   await resetDb();
-  await createAy();
-  adviser = await registerAndLogin('adviser@test.ph');
+  ayId = (await createAy()).ay.id;
+  adviser = await registerAndLogin('adviser@test.ph', undefined, ['Ana', 'Adviser']);
 });
 
 describe('sessions without an idle timeout', () => {
@@ -33,21 +34,33 @@ describe('sessions without an idle timeout', () => {
   });
 });
 
-describe('superadmin activity page', () => {
-  it('shows who is online, each visit and the hours spent', async () => {
-    const superadmin = await superadminClient();
-    const res = expectStatus(await superadmin.get('/admin/activity'), 200).body;
-    expect(res.online.map((o: { name: string }) => o.name).sort()).toEqual(['Sofia Super', 'Test User']);
-    const adviserRow = res.people.find((p: { name: string }) => p.name === 'Test User');
-    expect(adviserRow).toMatchObject({ role: 'Adviser', online: true, visits: 1 });
+describe('sign-in activity (adviser)', () => {
+  it('shows who of the year is online, each visit and the hours spent, and nobody from other years', async () => {
+    // someone who only belongs to another academic year
+    await prisma.academicYear.update({ where: { id: ayId }, data: { isCurrent: false } });
+    const other = await createAy(2027);
+    await registerAndLogin('outsider@test.ph', other.ay.id, ['Olga', 'Outsider']);
+    await prisma.academicYear.update({ where: { id: other.ay.id }, data: { isCurrent: false } });
+    await prisma.academicYear.update({ where: { id: ayId }, data: { isCurrent: true } });
+
+    const officer = await registerAndLogin('officer@test.ph', undefined, ['Carlo', 'Officer']);
+
+    const res = expectStatus(await adviser.get('/audit/activity'), 200).body;
+    expect(res.online.map((o: { name: string }) => o.name).sort()).toEqual(['Ana Adviser', 'Carlo Officer']);
+    expect(res.people.find((p: { name: string }) => p.name === 'Ana Adviser')).toMatchObject({ role: 'Adviser', online: true, visits: 1 });
+    expect(res.people.find((p: { name: string }) => p.name === 'Carlo Officer')).toMatchObject({ role: 'No access yet' });
+    expect(JSON.stringify(res)).not.toContain('Outsider');
     expect(res.visits[0]).toMatchObject({ device: expect.any(String), online: true, endedAt: null });
 
-    expectStatus(await adviser.post('/auth/logout'), 200);
-    const after = expectStatus(await superadmin.get('/admin/activity'), 200).body;
-    expect(after.online.map((o: { name: string }) => o.name)).toEqual(['Sofia Super']);
-    expect(after.visits.find((v: { name: string }) => v.name === 'Test User').endedAt).not.toBeNull();
+    expectStatus(await officer.post('/auth/logout'), 200);
+    const after = expectStatus(await adviser.get('/audit/activity'), 200).body;
+    expect(after.online.map((o: { name: string }) => o.name)).toEqual(['Ana Adviser']);
+    expect(after.visits.find((v: { name: string }) => v.name === 'Carlo Officer').endedAt).not.toBeNull();
+  });
 
-    expect((await adviser.get('/admin/activity')).status).toBe(401);
+  it('is only for the adviser', async () => {
+    const officer = await registerAndLogin('officer@test.ph');
+    expect((await officer.get('/audit/activity')).status).toBe(403);
   });
 
   it('names the device from the browser', () => {

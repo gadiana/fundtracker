@@ -1,7 +1,7 @@
 import { prisma } from '../db';
 
 /**
- * Sign-in activity for the superadmin's Activity page.
+ * Sign-in activity for the adviser's Sign-in activity page.
  *
  * Every signed-in request (at most once a minute per session) moves the session's current
  * visit forward. When nothing has come from a session for OFFLINE_AFTER_MS, the person is
