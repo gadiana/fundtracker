@@ -16,7 +16,7 @@ const DEFAULT_OPTIONS: CopyOptions = { adviser: true, staff: true, settings: tru
 const OPTION_HELP: Record<CopyOption, string> = {
   adviser: 'The source year’s adviser becomes this year’s adviser.',
   staff: 'Active officers and collectors keep their positions. Pending and deactivated accounts are not copied.',
-  settings: 'Organization details, logo, year levels, programs, sections, positions, approvers and every setting.',
+  settings: 'Year levels, programs, sections, positions, approvers and every setting.',
   funds: 'Fund names, amounts, year levels and programs. No charges or payments.',
   carryOver: 'Each fund starts with its remaining balance, labelled “Remaining balance from <fund> AY <year>”.',
   promoteStudents: 'Active students are copied one year level up. Staff confirm each one’s course, year and section before their first payment.',
@@ -96,7 +96,7 @@ export function CopyWizard({ target, open, onClose }: { target: { id: string; la
             {
               value: 'fresh' as const,
               label: 'Start fresh',
-              description: 'Default settings and positions. You fill in the organization details yourself.',
+              description: 'Default settings and positions. The organization’s name and logo are already set.',
             },
           ]}
         />

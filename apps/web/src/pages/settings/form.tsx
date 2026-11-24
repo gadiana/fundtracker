@@ -56,7 +56,7 @@ export function SettingsCard<K extends keyof Settings>({
   keys: readonly K[];
   children: (form: FormApi<K>) => ReactNode;
   refreshMeOnSave?: boolean;
-  /** where the card saves (the superadmin's branding page uses /admin/branding/<ay>) */
+  /** where the card saves (default: /settings) */
   endpoint?: string;
   cacheKey?: unknown[];
 }) {

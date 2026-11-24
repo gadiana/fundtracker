@@ -3,7 +3,7 @@ import { Alert, Checkbox, Field, Input, RadioCards, Select, Textarea, Toggle } f
 import { formatBytes } from '../../lib/format';
 import type { Settings } from '../../lib/types';
 import { SettingsCard } from './form';
-import { ApproversManager, LogoUploader, PositionsManager, ProgramsManager, SectionsManager } from './managers';
+import { ApproversManager, PositionsManager, ProgramsManager, SectionsManager } from './managers';
 
 type Props = { settings: Settings };
 
@@ -26,63 +26,6 @@ const asInt = (value: string) => (value === '' ? 0 : Number.parseInt(value.repla
 /** A text input bound to a nullable settings field (empty input = null). */
 function NullableInput({ id, value, onChange, disabled, placeholder }: { id: string; value: string | null; onChange: (v: string | null) => void; disabled: boolean; placeholder?: string }) {
   return <Input id={id} value={value ?? ''} disabled={disabled} placeholder={placeholder} onChange={(e) => onChange(e.target.value || null)} />;
-}
-
-/** The superadmin's editor for one academic year's branding. */
-export function BrandingEditor({ settings, ayId }: Props & { ayId: string }) {
-  const endpoint = `/admin/branding/${ayId}`;
-  const cacheKey = ['admin-branding', ayId];
-  return (
-    <>
-      <SettingsCard
-        title="Organization details"
-        description="Shown in the app, on receipts and on reports."
-        settings={settings}
-        keys={ORG_KEYS}
-        refreshMeOnSave
-        endpoint={endpoint}
-        cacheKey={cacheKey}
-      >
-        {({ values, set, errors, readOnly }) => (
-          <div className="grid gap-4 sm:grid-cols-[1fr_10rem]">
-            <Field label="Organization name" htmlFor="orgName" error={errors.orgName}>
-              <Input id="orgName" value={values.orgName} disabled={readOnly} onChange={(e) => set('orgName', e.target.value)} />
-            </Field>
-            <Field label="Abbreviation" htmlFor="orgAbbr" optional>
-              <Input id="orgAbbr" value={values.orgAbbr} disabled={readOnly} onChange={(e) => set('orgAbbr', e.target.value)} />
-            </Field>
-            <Field label="School / university" htmlFor="schoolName" optional>
-              <Input id="schoolName" value={values.schoolName} disabled={readOnly} onChange={(e) => set('schoolName', e.target.value)} />
-            </Field>
-            <Field label="Abbreviation" htmlFor="schoolAbbr" optional>
-              <Input id="schoolAbbr" value={values.schoolAbbr} disabled={readOnly} onChange={(e) => set('schoolAbbr', e.target.value)} />
-            </Field>
-            <Field label="College" htmlFor="collegeName" optional>
-              <Input id="collegeName" value={values.collegeName} disabled={readOnly} onChange={(e) => set('collegeName', e.target.value)} />
-            </Field>
-            <Field label="Abbreviation" htmlFor="collegeAbbr" optional>
-              <Input id="collegeAbbr" value={values.collegeAbbr} disabled={readOnly} onChange={(e) => set('collegeAbbr', e.target.value)} />
-            </Field>
-            <Field label="Program" htmlFor="programName" optional hint="Only if the organization belongs to one program.">
-              <NullableInput id="programName" value={values.programName} disabled={readOnly} onChange={(v) => set('programName', v)} />
-            </Field>
-            <Field label="Abbreviation" htmlFor="programAbbr" optional>
-              <NullableInput id="programAbbr" value={values.programAbbr} disabled={readOnly} onChange={(v) => set('programAbbr', v)} />
-            </Field>
-          </div>
-        )}
-      </SettingsCard>
-      <LogoUploader kind="org" settings={settings} title="Logo" description="A square PNG, JPEG or WebP, at least 256 px." endpoint={endpoint} cacheKey={cacheKey} />
-      <LogoUploader
-        kind="receipt"
-        settings={settings}
-        title="Receipt logo"
-        description="Optional. Receipts use the organization logo when this is empty."
-        endpoint={endpoint}
-        cacheKey={cacheKey}
-      />
-    </>
-  );
 }
 
 export function StructureSection({ settings }: Props) {
