@@ -1,0 +1,1126 @@
+// Student Organization Fund Tracker — database schema
+//
+// Conventions
+// - Money is BIGINT centavos (₱1.00 = 100). Never floats.
+// - Every AY-specific table has academicYearId. Child rows reference their parent
+//   by (parentId, academicYearId) composite foreign keys, so PostgreSQL itself
+//   rejects rows that link two different academic years.
+// - Actor columns store the ID and a name/designation snapshot taken at that moment.
+// - Features Prisma cannot express (partial unique indexes, CHECK constraints,
+//   append-only triggers, views) live in the hand-written part of the migrations.
+//   See README "Migrations".
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────── Enums ───────────────────────────────
+
+enum UserStatus {
+  active
+  deactivated
+
+  @@map("user_status")
+}
+
+enum AyStatus {
+  open
+  closed
+
+  @@map("ay_status")
+}
+
+enum AppRole {
+  adviser
+  member
+
+  @@map("app_role")
+}
+
+enum MembershipStatus {
+  pending
+  active
+  rejected
+  deactivated
+
+  @@map("membership_status")
+}
+
+enum UserTokenType {
+  email_verify
+  password_reset
+
+  @@map("user_token_type")
+}
+
+enum StudentStatus {
+  pending
+  active
+  rejected
+  inactive
+
+  @@map("student_status")
+}
+
+enum StudentSource {
+  manual
+  csv_import
+  self_enroll
+  promoted
+
+  @@map("student_source")
+}
+
+enum AllocationMode {
+  priority_only
+  staff_chooses
+  hybrid
+
+  @@map("allocation_mode")
+}
+
+enum ApprovalRule {
+  any_one
+  all_required
+
+  @@map("approval_rule")
+}
+
+enum PaperSize {
+  A4
+  LETTER
+  LEGAL
+
+  @@map("paper_size")
+}
+
+enum ChargeStatus {
+  active
+  cancelled
+
+  @@map("charge_status")
+}
+
+enum PaymentStatus {
+  posted
+  voided
+
+  @@map("payment_status")
+}
+
+enum LedgerEntryType {
+  collection
+  usage
+  carry_over
+  adjustment
+  void
+
+  @@map("ledger_entry_type")
+}
+
+enum FundRequestStatus {
+  pending
+  approved
+  rejected
+  receipt_submitted
+  revision_requested
+  /// liquidation approved; waiting for the excess to be reimbursed or the change returned
+  settlement_due
+  cleared
+  canceled
+
+  @@map("fund_request_status")
+}
+
+enum RequestDecision {
+  approved
+  rejected
+
+  @@map("request_decision")
+}
+
+/// used more than approved → reimburse the requestor; used less → the requestor returns the change
+enum SettlementKind {
+  reimburse
+  return
+
+  @@map("settlement_kind")
+}
+
+enum LiquidationStatus {
+  submitted
+  revision_requested
+  approved
+
+  @@map("liquidation_status")
+}
+
+enum LiquidationVerdict {
+  approved
+  revision_requested
+
+  @@map("liquidation_decision")
+}
+
+enum EmailStatus {
+  queued
+  sending
+  sent
+  failed
+
+  @@map("email_status")
+}
+
+// ─────────────────────── Global: accounts & AYs ───────────────────────
+
+model User {
+  id                    String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                 String     @unique @db.Citext
+  passwordHash          String     @map("password_hash")
+  firstName             String     @map("first_name") @db.VarChar(100)
+  middleName            String?    @map("middle_name") @db.VarChar(100)
+  lastName              String     @map("last_name") @db.VarChar(100)
+  suffix                String?    @db.VarChar(20)
+  contactNo             String?    @map("contact_no") @db.VarChar(30)
+  /// profile picture in file storage (a small square image the browser prepares)
+  avatarKey             String?    @map("avatar_key")
+  avatarMime            String?    @map("avatar_mime") @db.VarChar(30)
+  avatarUpdatedAt       DateTime?  @map("avatar_updated_at") @db.Timestamptz(6)
+  status                UserStatus @default(active)
+  /// system-wide: manages advisers, the organization's branding, full logs and sign-in activity.
+  /// Created only with the create-superadmin command, never by signing up.
+  isSuperadmin          Boolean    @default(false) @map("is_superadmin")
+  /// set when the superadmin creates the account with a starting password
+  mustChangePassword    Boolean    @default(false) @map("must_change_password")
+  emailVerifiedAt       DateTime?  @map("email_verified_at") @db.Timestamptz(6)
+  privacyConsentAt      DateTime?  @map("privacy_consent_at") @db.Timestamptz(6)
+  privacyConsentVersion String?    @map("privacy_consent_version") @db.VarChar(20)
+  totpSecretEnc         String?    @map("totp_secret_enc")
+  totpEnabled           Boolean    @default(false) @map("totp_enabled")
+  /// a secret being set up, not yet confirmed with a code
+  totpPendingSecretEnc  String?    @map("totp_pending_secret_enc")
+  totpEnabledAt         DateTime?  @map("totp_enabled_at") @db.Timestamptz(6)
+  /// the last 30-second step a code was accepted for, so a code can't be used twice
+  totpLastStep          BigInt?    @map("totp_last_step")
+  /// SHA-256 hashes of unused one-time recovery codes
+  totpRecoveryHashes    Json       @default("[]") @map("totp_recovery_hashes")
+  failedLoginCount      Int        @default(0) @map("failed_login_count")
+  lockedUntil           DateTime?  @map("locked_until") @db.Timestamptz(6)
+  lastLoginAt           DateTime?  @map("last_login_at") @db.Timestamptz(6)
+  deactivatedAt         DateTime?  @map("deactivated_at") @db.Timestamptz(6)
+  deactivatedById       String?    @map("deactivated_by") @db.Uuid
+  deactivatedByName     String?    @map("deactivated_by_name")
+  deactivationReason    String?    @map("deactivation_reason")
+  createdAt             DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tokens                UserToken[]
+  sessions              UserSession[]
+  visits                UserVisit[]
+  memberships           UserAyRole[]
+  notifications         Notification[]
+  processedPayments     Payment[]
+  fundRequests          FundRequest[]
+  fundRequestDecisions  FundRequestDecision[]
+  liquidationsSubmitted LiquidationReceipt[]
+  liquidationsSettled   LiquidationReceipt[]  @relation("LiquidationSettledBy")
+  liquidationDecisions  LiquidationDecision[]
+
+  @@map("users")
+}
+
+model UserToken {
+  id        String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String        @map("user_id") @db.Uuid
+  type      UserTokenType
+  tokenHash String        @unique @map("token_hash") @db.Char(64)
+  expiresAt DateTime      @map("expires_at") @db.Timestamptz(6)
+  usedAt    DateTime?     @map("used_at") @db.Timestamptz(6)
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@map("user_tokens")
+}
+
+model UserSession {
+  id                       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                   String    @map("user_id") @db.Uuid
+  refreshTokenHash         String    @unique @map("refresh_token_hash") @db.Char(64)
+  /// the token this one replaced: seeing it again (after a short grace) means it was stolen
+  previousRefreshTokenHash String?   @unique @map("previous_refresh_token_hash") @db.Char(64)
+  rotatedAt                DateTime? @map("rotated_at") @db.Timestamptz(6)
+  userAgent                String?   @map("user_agent")
+  ipAddress                String?   @map("ip_address") @db.Inet
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastSeenAt               DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  expiresAt                DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt                DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  visits UserVisit[]
+
+  @@index([userId])
+  @@map("user_sessions")
+}
+
+/// One stretch of time someone was using the system: from when they signed in or came back,
+/// to when they logged out or stopped (no request for a few minutes). A session that lasts
+/// days has many visits.
+model UserVisit {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  sessionId  String    @map("session_id") @db.Uuid
+  startedAt  DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  lastSeenAt DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  /// set on logout; otherwise the visit ended at lastSeenAt
+  endedAt    DateTime? @map("ended_at") @db.Timestamptz(6)
+
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session UserSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([userId, startedAt(sort: Desc)])
+  @@index([sessionId, startedAt(sort: Desc)])
+  @@index([lastSeenAt])
+  @@map("user_visits")
+}
+
+model AcademicYear {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  startYear    Int       @unique @map("start_year") @db.SmallInt
+  endYear      Int       @map("end_year") @db.SmallInt
+  label        String    @unique @db.VarChar(9)
+  status       AyStatus  @default(open)
+  isCurrent    Boolean   @default(false) @map("is_current")
+  closedAt     DateTime? @map("closed_at") @db.Timestamptz(6)
+  closedById   String?   @map("closed_by") @db.Uuid
+  closedByName String?   @map("closed_by_name")
+  createdById  String?   @map("created_by") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  settings         AySetting?
+  memberships      UserAyRole[]
+  designations     Designation[]
+  counters         AyCounter[]
+  files            StoredFile[]
+  programs         Program[]
+  sections         Section[]
+  enrollmentLinks  EnrollmentLink[]
+  students         Student[]
+  funds            Fund[]
+  notifications    Notification[]
+  emails           EmailOutbox[]
+  auditLogs        AuditLog[]
+  carryOverSources FundLedger[]     @relation("CarryOverSourceAy")
+  copyRunsAsSource AyCopyRun[]      @relation("CopySource")
+  copyRunsAsTarget AyCopyRun[]      @relation("CopyTarget")
+
+  @@map("academic_years")
+}
+
+// ─────────────────── AY-scoped: membership & positions ───────────────────
+
+model Designation {
+  id                   String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  academicYearId       String  @map("academic_year_id") @db.Uuid
+  name                 String  @db.VarChar(80)
+  canFileRequests      Boolean @default(false) @map("can_file_requests")
+  canCollect           Boolean @default(false) @map("can_collect")
+  isConfidentialExempt Boolean @default(false) @map("is_confidential_exempt")
+  /// may open the Funds page and see fund balances (the adviser always can)
+  canViewFunds         Boolean @default(true) @map("can_view_funds")
+  /// how many active members may hold this position at once; null = no limit
+  maxMembers           Int?    @map("max_members")
+  /// the limit is fixed at 1 and can't be changed (President, Vice President)
+  seatsLocked          Boolean @default(false) @map("seats_locked")
+  sortOrder            Int     @default(0) @map("sort_order")
+  isActive             Boolean @default(true) @map("is_active")
+
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  members      UserAyRole[]
+
+  @@unique([academicYearId, name])
+  @@unique([id, academicYearId])
+  @@map("designations")
+}
+
+model UserAyRole {
+  id                String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  academicYearId    String           @map("academic_year_id") @db.Uuid
+  userId            String           @map("user_id") @db.Uuid
+  role              AppRole?
+  designationId     String?          @map("designation_id") @db.Uuid
+  status            MembershipStatus @default(pending)
+  requestedAt       DateTime         @default(now()) @map("requested_at") @db.Timestamptz(6)
+  decidedAt         DateTime?        @map("decided_at") @db.Timestamptz(6)
+  decidedById       String?          @map("decided_by") @db.Uuid
+  decidedByName     String?          @map("decided_by_name")
+  decisionNote      String?          @map("decision_note")
+  deactivatedAt     DateTime?        @map("deactivated_at") @db.Timestamptz(6)
+  deactivatedById   String?          @map("deactivated_by") @db.Uuid
+  deactivatedByName String?          @map("deactivated_by_name")
+  copiedFromId      String?          @map("copied_from_id") @db.Uuid
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  designation  Designation? @relation(fields: [designationId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+  copiedFrom   UserAyRole?  @relation("MembershipCopy", fields: [copiedFromId], references: [id], onDelete: Restrict)
+  copies       UserAyRole[] @relation("MembershipCopy")
+  approverOf   AyApprover?
+
+  @@unique([academicYearId, userId])
+  @@unique([id, academicYearId])
+  @@index([academicYearId, status])
+  @@map("user_ay_roles")
+}
+
+/// Extra approvers besides the adviser (who is always an approver).
+model AyApprover {
+  academicYearId       String   @map("academic_year_id") @db.Uuid
+  userId               String   @map("user_id") @db.Uuid
+  approvesFundRequests Boolean  @default(true) @map("approves_fund_requests")
+  approvesLiquidations Boolean  @default(true) @map("approves_liquidations")
+  addedById            String?  @map("added_by") @db.Uuid
+  addedByName          String?  @map("added_by_name")
+  addedAt              DateTime @default(now()) @map("added_at") @db.Timestamptz(6)
+
+  membership UserAyRole @relation(fields: [academicYearId, userId], references: [academicYearId, userId], onDelete: Restrict)
+
+  @@id([academicYearId, userId])
+  @@map("ay_approvers")
+}
+
+// ─────────────────────────────── Files ───────────────────────────────
+
+model StoredFile {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  academicYearId String   @map("academic_year_id") @db.Uuid
+  storageDriver  String   @default("local") @map("storage_driver") @db.VarChar(20)
+  storageKey     String   @map("storage_key")
+  originalName   String   @map("original_name") @db.VarChar(255)
+  mimeType       String   @map("mime_type") @db.VarChar(100)
+  sizeBytes      Int      @map("size_bytes")
+  sha256         String   @db.Char(64)
+  uploadedById   String?  @map("uploaded_by") @db.Uuid
+  uploadedByName String?  @map("uploaded_by_name")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  academicYear      AcademicYear         @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  logoFor           AySetting[]          @relation("SettingsLogo")
+  receiptLogoFor    AySetting[]          @relation("SettingsReceiptLogo")
+  attachments       Attachment[]
+  settlementProofOf LiquidationReceipt[] @relation("SettlementProof")
+
+  @@unique([id, academicYearId])
+  @@index([storageKey])
+  @@map("stored_files")
+}
+
+// ───────────────────────────── Settings ─────────────────────────────
+
+model AySetting {
+  academicYearId String @id @map("academic_year_id") @db.Uuid
+
+  // Personalization
+  schoolName  String  @default("") @map("school_name") @db.VarChar(200)
+  schoolAbbr  String  @default("") @map("school_abbr") @db.VarChar(30)
+  collegeName String  @default("") @map("college_name") @db.VarChar(200)
+  collegeAbbr String  @default("") @map("college_abbr") @db.VarChar(30)
+  orgName     String  @default("") @map("org_name") @db.VarChar(200)
+  orgAbbr     String  @default("") @map("org_abbr") @db.VarChar(30)
+  programName String? @map("program_name") @db.VarChar(200)
+  programAbbr String? @map("program_abbr") @db.VarChar(30)
+  logoFileId  String? @map("logo_file_id") @db.Uuid
+
+  // Structure
+  yearLevelCount Int @default(4) @map("year_level_count") @db.SmallInt
+
+  // Collection (overpayment is never allowed)
+  allowPartialPayments Boolean        @default(true) @map("allow_partial_payments")
+  allocationMode       AllocationMode @default(hybrid) @map("allocation_mode")
+
+  // Approvals
+  requestApprovalRule     ApprovalRule @default(any_one) @map("request_approval_rule")
+  liquidationApprovalRule ApprovalRule @default(any_one) @map("liquidation_approval_rule")
+
+  // Receipts
+  receiptLogoFileId String? @map("receipt_logo_file_id") @db.Uuid
+  receiptFooterText String  @default("") @map("receipt_footer_text")
+  receiptQrMessage  String  @default("Please check student status using the QR") @map("receipt_qr_message")
+
+  // Fund usage
+  requireRequestAttachment     Boolean @default(true) @map("require_request_attachment")
+  requireLiquidationAttachment Boolean @default(true) @map("require_liquidation_attachment")
+
+  // Public QR page
+  publicFields Json @default("[\"name\",\"status\",\"breakdown\",\"transactions\"]") @map("public_fields")
+
+  // Reports
+  reportHeaderText      String    @default("") @map("report_header_text")
+  reportPreparedByName  String?   @map("report_prepared_by_name") @db.VarChar(150)
+  reportPreparedByTitle String?   @map("report_prepared_by_title") @db.VarChar(150)
+  reportNotedByName     String?   @map("report_noted_by_name") @db.VarChar(150)
+  reportNotedByTitle    String?   @map("report_noted_by_title") @db.VarChar(150)
+  reportPaperSize       PaperSize @default(A4) @map("report_paper_size")
+
+  // Email & notifications (SMTP credentials live in env, never here)
+  emailSenderName    String? @map("email_sender_name") @db.VarChar(150)
+  emailSenderAddress String? @map("email_sender_address") @db.Citext
+  emailReplyTo       String? @map("email_reply_to") @db.Citext
+  emailTemplates     Json    @default("{}") @map("email_templates")
+  notificationEvents Json    @default("{}") @map("notification_events")
+
+  // Security
+  passwordMinLength     Int     @default(10) @map("password_min_length") @db.SmallInt
+  passwordRequireUpper  Boolean @default(true) @map("password_require_upper")
+  passwordRequireNumber Boolean @default(true) @map("password_require_number")
+  passwordRequireSymbol Boolean @default(false) @map("password_require_symbol")
+  /// no longer used (sessions have no idle timeout); kept so older copies of the app still work
+  sessionTimeoutMinutes Int     @default(60) @map("session_timeout_minutes")
+  twofaMode             String  @default("off") @map("twofa_mode") @db.VarChar(10)
+
+  // Files
+  uploadAllowedMime Json @default("[\"image/jpeg\",\"image/png\",\"image/webp\",\"application/pdf\"]") @map("upload_allowed_mime")
+  uploadMaxBytes    Int  @default(10485760) @map("upload_max_bytes")
+
+  // Locale
+  currency   String @default("PHP") @db.Char(3)
+  timezone   String @default("Asia/Manila") @db.VarChar(50)
+  dateFormat String @default("YYYY-MM-DD") @map("date_format") @db.VarChar(20)
+
+  // Data Privacy Act (RA 10173) consent
+  privacyConsentText    String @default("") @map("privacy_consent_text")
+  privacyConsentVersion String @default("1") @map("privacy_consent_version") @db.VarChar(20)
+
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedById   String?  @map("updated_by") @db.Uuid
+  updatedByName String?  @map("updated_by_name")
+
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  logoFile     StoredFile?  @relation("SettingsLogo", fields: [logoFileId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+  receiptLogo  StoredFile?  @relation("SettingsReceiptLogo", fields: [receiptLogoFileId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+
+  @@map("ay_settings")
+}
+
+/// Gapless counters, incremented with a row lock inside the business transaction:
+/// UPDATE ay_counters SET last_value = last_value + 1 WHERE ... RETURNING last_value
+model AyCounter {
+  academicYearId String @map("academic_year_id") @db.Uuid
+  counterKey     String @map("counter_key") @db.VarChar(30)
+  lastValue      Int    @default(0) @map("last_value")
+
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+
+  @@id([academicYearId, counterKey])
+  @@map("ay_counters")
+}
+
+// ───────────────────────────── Structure ─────────────────────────────
+
+model Program {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  academicYearId String  @map("academic_year_id") @db.Uuid
+  code           String  @db.VarChar(20)
+  name           String  @db.VarChar(200)
+  isActive       Boolean @default(true) @map("is_active")
+
+  academicYear AcademicYear  @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  students     Student[]
+  funds        FundProgram[]
+
+  @@unique([academicYearId, code])
+  @@unique([id, academicYearId])
+  @@map("programs")
+}
+
+model Section {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  academicYearId String  @map("academic_year_id") @db.Uuid
+  name           String  @db.VarChar(20)
+  isActive       Boolean @default(true) @map("is_active")
+
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  students     Student[]
+
+  @@unique([academicYearId, name])
+  @@unique([id, academicYearId])
+  @@map("sections")
+}
+
+// ───────────────────────────── Students ─────────────────────────────
+
+model EnrollmentLink {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  academicYearId String    @map("academic_year_id") @db.Uuid
+  token          String    @unique @db.VarChar(64)
+  label          String?   @db.VarChar(120)
+  expiresAt      DateTime? @map("expires_at") @db.Timestamptz(6)
+  maxUses        Int?      @map("max_uses")
+  useCount       Int       @default(0) @map("use_count")
+  isActive       Boolean   @default(true) @map("is_active")
+  createdById    String    @map("created_by") @db.Uuid
+  createdByName  String    @map("created_by_name")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  revokedAt      DateTime? @map("revoked_at") @db.Timestamptz(6)
+  revokedByName  String?   @map("revoked_by_name")
+
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  students     Student[]
+
+  @@unique([id, academicYearId])
+  @@map("enrollment_links")
+}
+
+model Student {
+  id                       String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  academicYearId           String        @map("academic_year_id") @db.Uuid
+  studentNumber            String        @map("student_number") @db.VarChar(30)
+  firstName                String        @map("first_name") @db.VarChar(100)
+  middleName               String?       @map("middle_name") @db.VarChar(100)
+  lastName                 String        @map("last_name") @db.VarChar(100)
+  suffix                   String?       @db.VarChar(20)
+  nameKey                  String        @map("name_key") @db.VarChar(300)
+  nameKeyLoose             String        @map("name_key_loose") @db.VarChar(300)
+  programId                String        @map("program_id") @db.Uuid
+  yearLevel                Int           @map("year_level") @db.SmallInt
+  sectionId                String?       @map("section_id") @db.Uuid
+  email                    String?       @db.Citext
+  contactNo                String?       @map("contact_no") @db.VarChar(30)
+  status                   StudentStatus @default(active)
+  source                   StudentSource
+  consentGivenAt           DateTime?     @map("consent_given_at") @db.Timestamptz(6)
+  consentVersion           String?       @map("consent_version") @db.VarChar(20)
+  duplicateOverride        Boolean       @default(false) @map("duplicate_override")
+  duplicateOverrideById    String?       @map("duplicate_override_by") @db.Uuid
+  duplicateOverrideByName  String?       @map("duplicate_override_by_name")
+  duplicateOverrideReason  String?       @map("duplicate_override_reason")
+  needsProfileConfirmation Boolean       @default(false) @map("needs_profile_confirmation")
+  profileConfirmedAt       DateTime?     @map("profile_confirmed_at") @db.Timestamptz(6)
+  profileConfirmedById     String?       @map("profile_confirmed_by") @db.Uuid
+  profileConfirmedByName   String?       @map("profile_confirmed_by_name")
+  enrollmentLinkId         String?       @map("enrollment_link_id") @db.Uuid
+  promotedFromStudentId    String?       @map("promoted_from_student_id") @db.Uuid
+  approvedAt               DateTime?     @map("approved_at") @db.Timestamptz(6)
+  approvedById             String?       @map("approved_by") @db.Uuid
+  approvedByName           String?       @map("approved_by_name")
+  rejectedAt               DateTime?     @map("rejected_at") @db.Timestamptz(6)
+  rejectedById             String?       @map("rejected_by") @db.Uuid
+  rejectedByName           String?       @map("rejected_by_name")
+  rejectionComment         String?       @map("rejection_comment")
+  createdById              String?       @map("created_by") @db.Uuid
+  createdByName            String?       @map("created_by_name")
+  createdAt                DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  academicYear   AcademicYear     @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  program        Program          @relation(fields: [programId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+  section        Section?         @relation(fields: [sectionId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+  enrollmentLink EnrollmentLink?  @relation(fields: [enrollmentLinkId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+  promotedFrom   Student?         @relation("Promotion", fields: [promotedFromStudentId], references: [id], onDelete: Restrict)
+  promotedTo     Student[]        @relation("Promotion")
+  qrTokens       StudentQrToken[]
+  charges        StudentCharge[]
+  payments       Payment[]
+
+  @@unique([id, academicYearId])
+  @@index([academicYearId, nameKey])
+  @@index([academicYearId, nameKeyLoose])
+  @@index([academicYearId, programId, yearLevel, sectionId])
+  @@map("students")
+}
+
+model StudentQrToken {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  academicYearId String    @map("academic_year_id") @db.Uuid
+  studentId      String    @map("student_id") @db.Uuid
+  token          String    @unique @db.VarChar(64)
+  isActive       Boolean   @default(true) @map("is_active")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  revokedAt      DateTime? @map("revoked_at") @db.Timestamptz(6)
+  revokedById    String?   @map("revoked_by") @db.Uuid
+  revokedByName  String?   @map("revoked_by_name")
+  revokeReason   String?   @map("revoke_reason")
+
+  student  Student   @relation(fields: [studentId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+  payments Payment[]
+
+  @@unique([id, academicYearId])
+  @@map("student_qr_tokens")
+}
+
+// ───────────────────────────── Funds ─────────────────────────────
+
+model Fund {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  academicYearId   String   @map("academic_year_id") @db.Uuid
+  name             String   @db.VarChar(120)
+  notes            String?
+  amountPerStudent BigInt   @map("amount_per_student")
+  isConfidential   Boolean  @default(false) @map("is_confidential")
+  isMandatory      Boolean  @default(true) @map("is_mandatory")
+  allPrograms      Boolean  @default(true) @map("all_programs")
+  priority         Int
+  isActive         Boolean  @default(true) @map("is_active")
+  copiedFromFundId String?  @map("copied_from_fund_id") @db.Uuid
+  createdById      String?  @map("created_by") @db.Uuid
+  createdByName    String?  @map("created_by_name")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  academicYear     AcademicYear    @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  copiedFrom       Fund?           @relation("FundCopy", fields: [copiedFromFundId], references: [id], onDelete: Restrict)
+  copies           Fund[]          @relation("FundCopy")
+  yearLevels       FundYearLevel[]
+  programs         FundProgram[]
+  charges          StudentCharge[]
+  ledger           FundLedger[]    @relation("FundLedgerFund")
+  carryOverTargets FundLedger[]    @relation("CarryOverSourceFund")
+  requests         FundRequest[]
+
+  @@unique([academicYearId, name])
+  // reorder by moving priorities through negative values inside one transaction
+  @@unique([academicYearId, priority])
+  @@unique([id, academicYearId])
+  @@map("funds")
+}
+
+model FundYearLevel {
+  academicYearId String @map("academic_year_id") @db.Uuid
+  fundId         String @map("fund_id") @db.Uuid
+  yearLevel      Int    @map("year_level") @db.SmallInt
+
+  fund Fund @relation(fields: [fundId, academicYearId], references: [id, academicYearId], onDelete: Cascade)
+
+  @@id([fundId, yearLevel])
+  @@map("fund_year_levels")
+}
+
+model FundProgram {
+  academicYearId String @map("academic_year_id") @db.Uuid
+  fundId         String @map("fund_id") @db.Uuid
+  programId      String @map("program_id") @db.Uuid
+
+  fund    Fund    @relation(fields: [fundId, academicYearId], references: [id, academicYearId], onDelete: Cascade)
+  program Program @relation(fields: [programId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+
+  @@id([fundId, programId])
+  @@map("fund_programs")
+}
+
+model StudentCharge {
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  academicYearId  String       @map("academic_year_id") @db.Uuid
+  studentId       String       @map("student_id") @db.Uuid
+  fundId          String       @map("fund_id") @db.Uuid
+  amountDue       BigInt       @map("amount_due")
+  status          ChargeStatus @default(active)
+  cancelledAt     DateTime?    @map("cancelled_at") @db.Timestamptz(6)
+  cancelledById   String?      @map("cancelled_by") @db.Uuid
+  cancelledByName String?      @map("cancelled_by_name")
+  cancelReason    String?      @map("cancel_reason")
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  student     Student             @relation(fields: [studentId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+  fund        Fund                @relation(fields: [fundId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+  allocations PaymentAllocation[]
+
+  @@unique([studentId, fundId])
+  @@unique([id, academicYearId])
+  @@index([fundId])
+  @@map("student_charges")
+}
+
+// ───────────────────────────── Collection ─────────────────────────────
+
+model Payment {
+  id                     String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  academicYearId         String        @map("academic_year_id") @db.Uuid
+  transactionNo          String        @map("transaction_no") @db.VarChar(20)
+  idempotencyKey         String        @unique @map("idempotency_key") @db.Uuid
+  studentId              String        @map("student_id") @db.Uuid
+  amount                 BigInt
+  balanceBefore          BigInt        @map("balance_before")
+  balanceAfter           BigInt        @map("balance_after")
+  clearedAfter           Boolean       @map("cleared_after")
+  studentNumberSnapshot  String        @map("student_number_snapshot") @db.VarChar(30)
+  studentNameSnapshot    String        @map("student_name_snapshot") @db.VarChar(300)
+  programSnapshot        String        @map("program_snapshot") @db.VarChar(20)
+  yearLevelSnapshot      Int           @map("year_level_snapshot") @db.SmallInt
+  sectionSnapshot        String?       @map("section_snapshot") @db.VarChar(20)
+  processedById          String        @map("processed_by") @db.Uuid
+  processedByName        String        @map("processed_by_name")
+  processedByDesignation String?       @map("processed_by_designation")
+  receivedAt             DateTime      @default(now()) @map("received_at") @db.Timestamptz(6)
+  qrTokenId              String?       @map("qr_token_id") @db.Uuid
+  qrUrl                  String        @map("qr_url")
+  notes                  String?
+  status                 PaymentStatus @default(posted)
+  voidedAt               DateTime?     @map("voided_at") @db.Timestamptz(6)
+  voidedById             String?       @map("voided_by") @db.Uuid
+  voidedByName           String?       @map("voided_by_name")
+  voidedByDesignation    String?       @map("voided_by_designation")
+  voidReason             String?       @map("void_reason")
+  createdAt              DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  student     Student             @relation(fields: [studentId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+  qrToken     StudentQrToken?     @relation(fields: [qrTokenId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+  processedBy User                @relation(fields: [processedById], references: [id], onDelete: Restrict)
+  allocations PaymentAllocation[]
+  ledger      FundLedger[]
+
+  @@unique([academicYearId, transactionNo])
+  @@unique([id, academicYearId])
+  @@index([academicYearId, receivedAt(sort: Desc)])
+  @@index([studentId])
+  @@map("payments")
+}
+
+model PaymentAllocation {
+  id                 String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  academicYearId     String @map("academic_year_id") @db.Uuid
+  paymentId          String @map("payment_id") @db.Uuid
+  chargeId           String @map("charge_id") @db.Uuid
+  amount             BigInt
+  fundNameSnapshot   String @map("fund_name_snapshot")
+  chargeBalanceAfter BigInt @map("charge_balance_after")
+
+  payment     Payment       @relation(fields: [paymentId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+  charge      StudentCharge @relation(fields: [chargeId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+  ledgerEntry FundLedger?
+
+  @@unique([paymentId, chargeId])
+  @@index([chargeId])
+  @@map("payment_allocations")
+}
+
+// ───────────────────────────── Fund use ─────────────────────────────
+
+model FundRequest {
+  id                    String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  academicYearId        String            @map("academic_year_id") @db.Uuid
+  requestNo             String            @map("request_no") @db.VarChar(20)
+  fundId                String            @map("fund_id") @db.Uuid
+  fundNameSnapshot      String            @map("fund_name_snapshot")
+  requestorId           String            @map("requestor_id") @db.Uuid
+  requestorName         String            @map("requestor_name")
+  requestorDesignation  String            @map("requestor_designation")
+  amountRequested       BigInt            @map("amount_requested")
+  purpose               String
+  useAt                 DateTime          @map("use_at") @db.Timestamptz(6)
+  status                FundRequestStatus @default(pending)
+  approvalRule          ApprovalRule      @map("approval_rule")
+  submittedAt           DateTime          @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  approvedAt            DateTime?         @map("approved_at") @db.Timestamptz(6)
+  approvedById          String?           @map("approved_by") @db.Uuid
+  approvedByName        String?           @map("approved_by_name")
+  approvedByDesignation String?           @map("approved_by_designation")
+  rejectedAt            DateTime?         @map("rejected_at") @db.Timestamptz(6)
+  rejectedById          String?           @map("rejected_by") @db.Uuid
+  rejectedByName        String?           @map("rejected_by_name")
+  rejectionComment      String?           @map("rejection_comment")
+  canceledAt            DateTime?         @map("canceled_at") @db.Timestamptz(6)
+  canceledById          String?           @map("canceled_by") @db.Uuid
+  canceledByName        String?           @map("canceled_by_name")
+  cancelReason          String?           @map("cancel_reason")
+  clearedAt             DateTime?         @map("cleared_at") @db.Timestamptz(6)
+  /// finished requests (cleared, rejected, canceled) can be archived to keep the lists short
+  archivedAt            DateTime?         @map("archived_at") @db.Timestamptz(6)
+  archivedById          String?           @map("archived_by") @db.Uuid
+  archivedByName        String?           @map("archived_by_name")
+  createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  fund         Fund                  @relation(fields: [fundId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+  requestor    User                  @relation(fields: [requestorId], references: [id], onDelete: Restrict)
+  decisions    FundRequestDecision[]
+  liquidations LiquidationReceipt[]
+  attachments  Attachment[]
+
+  @@unique([academicYearId, requestNo])
+  @@unique([id, academicYearId])
+  @@index([academicYearId, status])
+  @@index([academicYearId, requestorId])
+  @@index([academicYearId, archivedAt])
+  @@index([fundId, status])
+  @@map("fund_requests")
+}
+
+model FundRequestDecision {
+  id                  String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  academicYearId      String          @map("academic_year_id") @db.Uuid
+  fundRequestId       String          @map("fund_request_id") @db.Uuid
+  approverId          String          @map("approver_id") @db.Uuid
+  approverName        String          @map("approver_name")
+  approverDesignation String?         @map("approver_designation")
+  decision            RequestDecision
+  comment             String?
+  decidedAt           DateTime        @default(now()) @map("decided_at") @db.Timestamptz(6)
+
+  fundRequest FundRequest @relation(fields: [fundRequestId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+  approver    User        @relation(fields: [approverId], references: [id], onDelete: Restrict)
+
+  @@unique([fundRequestId, approverId])
+  @@map("fund_request_decisions")
+}
+
+/// One row per (re)submission, so the full revision history is kept.
+model LiquidationReceipt {
+  id                      String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  academicYearId          String            @map("academic_year_id") @db.Uuid
+  fundRequestId           String            @map("fund_request_id") @db.Uuid
+  version                 Int               @db.SmallInt
+  approvedAmount          BigInt            @map("approved_amount")
+  fundUsed                BigInt            @map("fund_used")
+  remarks                 String?
+  status                  LiquidationStatus @default(submitted)
+  approvalRule            ApprovalRule      @map("approval_rule")
+  submittedById           String            @map("submitted_by") @db.Uuid
+  submittedByName         String            @map("submitted_by_name")
+  submittedByDesignation  String            @map("submitted_by_designation")
+  submittedAt             DateTime          @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  overApprovedAccepted    Boolean           @default(false) @map("over_approved_accepted")
+  overAcceptedById        String?           @map("over_accepted_by") @db.Uuid
+  overAcceptedByName      String?           @map("over_accepted_by_name")
+  revisionMessage         String?           @map("revision_message")
+  revisionRequestedAt     DateTime?         @map("revision_requested_at") @db.Timestamptz(6)
+  revisionRequestedById   String?           @map("revision_requested_by") @db.Uuid
+  revisionRequestedByName String?           @map("revision_requested_by_name")
+  approvedAt              DateTime?         @map("approved_at") @db.Timestamptz(6)
+  approvedById            String?           @map("approved_by") @db.Uuid
+  approvedByName          String?           @map("approved_by_name")
+  approvedByDesignation   String?           @map("approved_by_designation")
+  /// taken out of the fund on approval: fund_used, or only the approved amount if the excess was not accepted
+  chargedAmount           BigInt?           @map("charged_amount")
+  settlementKind          SettlementKind?   @map("settlement_kind")
+  settlementAmount        BigInt?           @map("settlement_amount")
+  settledAt               DateTime?         @map("settled_at") @db.Timestamptz(6)
+  settledById             String?           @map("settled_by") @db.Uuid
+  settledByName           String?           @map("settled_by_name")
+  settledByDesignation    String?           @map("settled_by_designation")
+  settlementNote          String?           @map("settlement_note")
+  settlementFileId        String?           @map("settlement_file_id") @db.Uuid
+
+  fundRequest    FundRequest           @relation(fields: [fundRequestId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+  submittedBy    User                  @relation(fields: [submittedById], references: [id], onDelete: Restrict)
+  settledBy      User?                 @relation("LiquidationSettledBy", fields: [settledById], references: [id], onDelete: Restrict)
+  settlementFile StoredFile?           @relation("SettlementProof", fields: [settlementFileId, academicYearId], references: [id, academicYearId], onDelete: Restrict, map: "liquidation_receipts_settlement_file_fkey")
+  decisions      LiquidationDecision[]
+  entries        LiquidationEntry[]
+  attachments    Attachment[]
+  ledger         FundLedger[]
+
+  @@unique([fundRequestId, version])
+  @@unique([id, academicYearId])
+  @@map("liquidation_receipts")
+}
+
+/// One official receipt in a liquidation (a liquidation has one or more). fund_used of the
+/// liquidation is the sum of its receipts, and a receipt's total is the sum of its items.
+model LiquidationEntry {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  academicYearId       String   @map("academic_year_id") @db.Uuid
+  liquidationReceiptId String   @map("liquidation_receipt_id") @db.Uuid
+  /// 1, 2, 3… printed as R-1, R-2… and used to find the receipt's photo in the report
+  sortOrder            Int      @map("sort_order") @db.SmallInt
+  /// what this receipt's money was used for, e.g. "Booth for the fair"
+  usedFor              String   @map("used_for") @db.VarChar(200)
+  payee                String?  @db.VarChar(150)
+  receiptNo            String?  @map("receipt_no") @db.VarChar(60)
+  receiptDate          DateTime @map("receipt_date") @db.Date
+  total                BigInt
+
+  liquidation LiquidationReceipt @relation(fields: [liquidationReceiptId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+  items       LiquidationItem[]
+  attachments Attachment[]
+
+  @@unique([liquidationReceiptId, sortOrder])
+  @@unique([id, academicYearId])
+  @@map("liquidation_entries")
+}
+
+model LiquidationItem {
+  id             String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  academicYearId String @map("academic_year_id") @db.Uuid
+  entryId        String @map("entry_id") @db.Uuid
+  sortOrder      Int    @map("sort_order") @db.SmallInt
+  description    String @db.VarChar(200)
+  quantity       Int
+  unitCost       BigInt @map("unit_cost")
+  /// quantity × unit cost
+  amount         BigInt
+
+  entry LiquidationEntry @relation(fields: [entryId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+
+  @@unique([entryId, sortOrder])
+  @@map("liquidation_items")
+}
+
+model LiquidationDecision {
+  id                   String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  academicYearId       String             @map("academic_year_id") @db.Uuid
+  liquidationReceiptId String             @map("liquidation_receipt_id") @db.Uuid
+  approverId           String             @map("approver_id") @db.Uuid
+  approverName         String             @map("approver_name")
+  approverDesignation  String?            @map("approver_designation")
+  decision             LiquidationVerdict
+  comment              String?
+  decidedAt            DateTime           @default(now()) @map("decided_at") @db.Timestamptz(6)
+
+  liquidationReceipt LiquidationReceipt @relation(fields: [liquidationReceiptId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+  approver           User               @relation(fields: [approverId], references: [id], onDelete: Restrict)
+
+  @@unique([liquidationReceiptId, approverId])
+  @@map("liquidation_decisions")
+}
+
+model Attachment {
+  id                   String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  academicYearId       String  @map("academic_year_id") @db.Uuid
+  fileId               String  @map("file_id") @db.Uuid
+  fundRequestId        String? @map("fund_request_id") @db.Uuid
+  liquidationReceiptId String? @map("liquidation_receipt_id") @db.Uuid
+  /// the receipt inside the liquidation this file shows (liquidation files only)
+  liquidationEntryId   String? @map("liquidation_entry_id") @db.Uuid
+  sortOrder            Int     @default(0) @map("sort_order") @db.SmallInt
+
+  file               StoredFile          @relation(fields: [fileId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+  fundRequest        FundRequest?        @relation(fields: [fundRequestId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+  liquidationReceipt LiquidationReceipt? @relation(fields: [liquidationReceiptId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+  liquidationEntry   LiquidationEntry?   @relation(fields: [liquidationEntryId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+
+  @@map("attachments")
+}
+
+// ───────────────────── Fund ledger (append-only) ─────────────────────
+
+/// A fund's balance is SUM(amount). Signed centavos: + adds to the fund.
+model FundLedger {
+  id                   String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  academicYearId       String          @map("academic_year_id") @db.Uuid
+  fundId               String          @map("fund_id") @db.Uuid
+  entryType            LedgerEntryType @map("entry_type")
+  amount               BigInt
+  label                String
+  paymentId            String?         @map("payment_id") @db.Uuid
+  allocationId         String?         @unique @map("allocation_id") @db.Uuid
+  liquidationReceiptId String?         @unique @map("liquidation_receipt_id") @db.Uuid
+  reversesEntryId      String?         @unique @map("reverses_entry_id") @db.Uuid
+  sourceAcademicYearId String?         @map("source_academic_year_id") @db.Uuid
+  sourceFundId         String?         @map("source_fund_id") @db.Uuid
+  createdById          String?         @map("created_by") @db.Uuid
+  createdByName        String          @map("created_by_name")
+  createdByDesignation String?         @map("created_by_designation")
+  createdAt            DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  fund               Fund                @relation("FundLedgerFund", fields: [fundId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+  payment            Payment?            @relation(fields: [paymentId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+  liquidationReceipt LiquidationReceipt? @relation(fields: [liquidationReceiptId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
+  allocation         PaymentAllocation?  @relation(fields: [allocationId], references: [id], onDelete: Restrict)
+  reversesEntry      FundLedger?         @relation("LedgerReversal", fields: [reversesEntryId], references: [id], onDelete: Restrict)
+  reversedBy         FundLedger?         @relation("LedgerReversal")
+  sourceAcademicYear AcademicYear?       @relation("CarryOverSourceAy", fields: [sourceAcademicYearId], references: [id], onDelete: Restrict)
+  sourceFund         Fund?               @relation("CarryOverSourceFund", fields: [sourceFundId], references: [id], onDelete: Restrict)
+
+  @@index([fundId, createdAt])
+  @@map("fund_ledger")
+}
+
+// ─────────────────── Notifications, email, audit ───────────────────
+
+model Notification {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  academicYearId String?   @map("academic_year_id") @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  type           String    @db.VarChar(60)
+  title          String
+  body           String?
+  linkPath       String?   @map("link_path")
+  entityType     String?   @map("entity_type") @db.VarChar(60)
+  entityId       String?   @map("entity_id") @db.Uuid
+  readAt         DateTime? @map("read_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  academicYear AcademicYear? @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+model EmailOutbox {
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  academicYearId  String?     @map("academic_year_id") @db.Uuid
+  toEmail         String      @map("to_email") @db.Citext
+  subject         String
+  htmlBody        String      @map("html_body")
+  textBody        String?     @map("text_body")
+  templateKey     String?     @map("template_key") @db.VarChar(60)
+  entityType      String?     @map("entity_type") @db.VarChar(60)
+  entityId        String?     @map("entity_id") @db.Uuid
+  status          EmailStatus @default(queued)
+  attempts        Int         @default(0) @db.SmallInt
+  /// false when the stored copy can't be re-sent: its body holds a one-time link, or it had attachments
+  retryable       Boolean     @default(true)
+  lastError       String?     @map("last_error")
+  scheduledAt     DateTime    @default(now()) @map("scheduled_at") @db.Timestamptz(6)
+  sentAt          DateTime?   @map("sent_at") @db.Timestamptz(6)
+  requestedById   String?     @map("requested_by") @db.Uuid
+  requestedByName String?     @map("requested_by_name")
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  academicYear AcademicYear? @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+
+  @@index([status, scheduledAt])
+  @@map("email_outbox")
+}
+
+/// Append-only. actor_user_id deliberately has no foreign key: the name snapshot is the record.
+model AuditLog {
+  id               BigInt   @id @default(autoincrement())
+  academicYearId   String?  @map("academic_year_id") @db.Uuid
+  actorUserId      String?  @map("actor_user_id") @db.Uuid
+  actorName        String   @map("actor_name")
+  actorRole        String?  @map("actor_role")
+  actorDesignation String?  @map("actor_designation")
+  action           String   @db.VarChar(40)
+  entityType       String   @map("entity_type") @db.VarChar(60)
+  entityId         String?  @map("entity_id")
+  beforeData       Json?    @map("before_data")
+  afterData        Json?    @map("after_data")
+  ipAddress        String?  @map("ip_address") @db.Inet
+  userAgent        String?  @map("user_agent")
+  requestId        String?  @map("request_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  academicYear AcademicYear? @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+
+  @@index([academicYearId, createdAt(sort: Desc)])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+model AyCopyRun {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceAcademicYearId String   @map("source_academic_year_id") @db.Uuid
+  targetAcademicYearId String   @map("target_academic_year_id") @db.Uuid
+  options              Json
+  resultSummary        Json     @map("result_summary")
+  executedById         String   @map("executed_by") @db.Uuid
+  executedByName       String   @map("executed_by_name")
+  executedAt           DateTime @default(now()) @map("executed_at") @db.Timestamptz(6)
+
+  sourceAcademicYear AcademicYear @relation("CopySource", fields: [sourceAcademicYearId], references: [id], onDelete: Restrict)
+  targetAcademicYear AcademicYear @relation("CopyTarget", fields: [targetAcademicYearId], references: [id], onDelete: Restrict)
+
+  @@map("ay_copy_runs")
+}
