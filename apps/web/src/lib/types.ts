@@ -34,9 +34,6 @@ export interface Me {
     emailVerified: boolean;
     twoFactorEnabled: boolean;
     avatarUrl: string | null;
-    isSuperadmin: boolean;
-    /** given a starting password by the superadmin: must set their own first */
-    mustChangePassword: boolean;
   };
   currentAyId: string | null;
   academicYears: AyEntry[];
@@ -94,41 +91,8 @@ export interface AuditEntry {
   before: unknown;
   after: unknown;
   ipAddress: string | null;
-  academicYear: string | null;
   actorRole: string | null;
   device: string | null;
-}
-
-/** The adviser's activity log: student and staff changes in plain words. */
-export interface ActivityEntry {
-  id: string;
-  createdAt: string;
-  actorName: string;
-  actorDesignation: string | null;
-  kind: 'student' | 'staff';
-  summary: string;
-  details: string[];
-}
-
-export interface AdminAy {
-  id: string;
-  label: string;
-  status: 'open' | 'closed';
-  isCurrent: boolean;
-  hasSettings: boolean;
-}
-
-export interface AdviserRow {
-  membershipId: string;
-  userId: string;
-  name: string;
-  email: string;
-  academicYear: { id: string; label: string };
-  status: 'pending' | 'active' | 'rejected' | 'deactivated';
-  mustChangePassword: boolean;
-  addedAt: string | null;
-  addedByName: string | null;
-  lastLoginAt: string | null;
 }
 
 export interface VisitRow {

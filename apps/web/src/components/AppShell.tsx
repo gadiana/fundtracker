@@ -1,10 +1,9 @@
-import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import {
   Activity,
   Banknote,
-  Building2,
   CalendarRange,
   FileText,
   GraduationCap,
@@ -17,7 +16,6 @@ import {
   ScrollText,
   Settings as SettingsIcon,
   UserCircle,
-  UserCog,
   Users,
   Wallet,
   X,
@@ -30,8 +28,7 @@ import { NoAccess } from '../pages/NoAccess';
 import { useRequestCounts } from '../pages/requests/RequestsPage';
 import { Avatar } from './Avatar';
 import { NotificationBell } from './notifications';
-import { useToast } from './Toast';
-import { Alert, Button, Field, Input, PageHeader, Select, Spinner, cx } from './ui';
+import { PageHeader, Select, Spinner, cx } from './ui';
 
 // rarely needed, so loaded only when shown
 const CopyWizard = lazy(async () => ({ default: (await import('./CopyWizard')).CopyWizard }));
@@ -69,19 +66,7 @@ const NAV: { label?: string; items: NavItem[] }[] = [
       { to: '/academic-years', label: 'Academic years', icon: CalendarRange, permission: 'manage' },
       { to: '/settings', label: 'Settings', icon: SettingsIcon, permission: 'manage' },
       { to: '/audit', label: 'Activity log', icon: ScrollText, permission: 'manage' },
-    ],
-  },
-];
-
-/** The superadmin's menu: oversight of the whole system, not any one academic year. */
-const SUPERADMIN_NAV: { label?: string; items: NavItem[] }[] = [
-  {
-    label: 'Superadmin',
-    items: [
-      { to: '/admin/activity', label: 'Activity', icon: Activity },
-      { to: '/admin/advisers', label: 'Advisers', icon: UserCog },
-      { to: '/admin/organization', label: 'Organization', icon: Building2 },
-      { to: '/admin/logs', label: 'System log', icon: ScrollText },
+      { to: '/activity', label: 'Sign-in activity', icon: Activity, permission: 'manage' },
     ],
   },
 ];
@@ -190,12 +175,10 @@ export function AppShell() {
 
   useEffect(() => setDrawerOpen(false), [location.pathname]);
 
-  const isSuperadmin = Boolean(me?.user.isSuperadmin);
   const groups = [
-    ...(isSuperadmin ? SUPERADMIN_NAV : []),
     ...NAV.map((g) => ({ ...g, items: isActiveMember ? g.items.filter((i) => !i.permission || can(i.permission)) : [] })),
   ].filter((g) => g.items.length);
-  const showPage = isActiveMember || ALWAYS_OPEN.includes(location.pathname) || (isSuperadmin && location.pathname.startsWith('/admin/'));
+  const showPage = isActiveMember || ALWAYS_OPEN.includes(location.pathname);
   // an AY that requires two-factor sign-in shows only the setup until it's done (the API refuses the rest)
   const needsTwoFactor = Boolean(ay?.membership && ay.twoFactorMode === 'required' && !me?.user.twoFactorEnabled);
   const unreadCount = unread.data?.count ?? 0;
@@ -303,11 +286,7 @@ export function AppShell() {
       )}
 
       <main className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
-        {me?.user.mustChangePassword ? (
-          <ChangePasswordRequired />
-        ) : isSuperadmin && !isActiveMember && location.pathname === '/' ? (
-          <Navigate to="/admin/activity" replace />
-        ) : needsTwoFactor ? (
+        {needsTwoFactor ? (
           <TwoFactorRequired label={ay!.label} />
         ) : showPage ? (
           <Outlet />
@@ -321,53 +300,6 @@ export function AppShell() {
           <CopyWizard key={ay.id} open target={ay} onClose={closeWizard} />
         </Suspense>
       )}
-    </div>
-  );
-}
-
-/** The superadmin gave this account a starting password: nothing else opens until it's replaced. */
-function ChangePasswordRequired() {
-  const { refreshMe } = useAuth();
-  const toast = useToast();
-  const [form, setForm] = useState({ currentPassword: '', newPassword: '', confirm: '' });
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-  const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    if (form.newPassword !== form.confirm) return setError('The new passwords don’t match.');
-    setBusy(true);
-    setError('');
-    try {
-      await api('/me/password', { method: 'POST', body: { currentPassword: form.currentPassword, newPassword: form.newPassword } });
-      await refreshMe();
-      toast('Your password is set. Welcome!');
-    } catch (err) {
-      setError(describeError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="mx-auto max-w-md">
-      <PageHeader title="Set your own password" description="You were given a starting password. Choose your own before you continue." />
-      <form onSubmit={submit} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <Field label="Starting password" htmlFor="cp-current">
-          <Input id="cp-current" type="password" autoComplete="current-password" value={form.currentPassword} onChange={set('currentPassword')} required />
-        </Field>
-        <Field label="New password" htmlFor="cp-new">
-          <Input id="cp-new" type="password" autoComplete="new-password" value={form.newPassword} onChange={set('newPassword')} required />
-        </Field>
-        <Field label="New password again" htmlFor="cp-confirm">
-          <Input id="cp-confirm" type="password" autoComplete="new-password" value={form.confirm} onChange={set('confirm')} required />
-        </Field>
-        {error && <Alert>{error}</Alert>}
-        <Button type="submit" className="w-full" loading={busy}>
-          Save password
-        </Button>
-      </form>
     </div>
   );
 }
