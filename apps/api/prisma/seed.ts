@@ -1,5 +1,5 @@
 /**
- * Seed: one sample organization and AY 2026-2027 with settings,
+ * Seed: AY 2026-2027 with settings (the organization's name from src/branding.ts),
  * positions, programs and sections. Safe to run more than once.
  *
  * No user accounts are seeded: the first person to sign up becomes the adviser.
@@ -8,6 +8,7 @@
 import { randomBytes } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { studentNameKeys } from '@sft/shared';
+import { BRANDING } from '../src/branding';
 import { COUNTER_KEYS, DEFAULT_DESIGNATIONS, defaultPrivacyConsent } from '../src/lib/defaults';
 import { syncCharges } from '../src/modules/funds/charges';
 
@@ -60,15 +61,15 @@ async function main() {
     update: {},
     create: {
       academicYearId: ay.id,
-      schoolName: 'Sample State University',
-      schoolAbbr: 'SSU',
-      collegeName: 'Sample College',
-      collegeAbbr: 'SC',
-      orgName: 'Sample Student Organization',
-      orgAbbr: 'SSO',
-      reportHeaderText: 'Sample Student Organization — Fund Report',
+      schoolName: BRANDING.schoolName,
+      schoolAbbr: BRANDING.schoolAbbr,
+      collegeName: BRANDING.collegeName,
+      collegeAbbr: BRANDING.collegeAbbr,
+      orgName: BRANDING.orgName,
+      orgAbbr: BRANDING.orgAbbr,
+      reportHeaderText: `${BRANDING.orgName} — Fund Report`,
       receiptFooterText: 'Thank you! Keep this receipt for your records.',
-      privacyConsentText: defaultPrivacyConsent('Sample Student Organization'),
+      privacyConsentText: defaultPrivacyConsent(BRANDING.orgName),
       privacyConsentVersion: '1',
     },
   });
@@ -154,7 +155,7 @@ async function main() {
     fundsAdded++;
   }
 
-  console.info(`Seeded AY ${ay.label}${ay.isCurrent ? ' (current)' : ''}: Sample Student Organization, ${DEFAULT_DESIGNATIONS.length} positions, ${PROGRAMS.length} programs, ${SECTIONS.length} sections, ${added} new sample student(s), ${fundsAdded} new sample fund(s).`);
+  console.info(`Seeded AY ${ay.label}${ay.isCurrent ? ' (current)' : ''}: ${BRANDING.orgName}, ${DEFAULT_DESIGNATIONS.length} positions, ${PROGRAMS.length} programs, ${SECTIONS.length} sections, ${added} new sample student(s), ${fundsAdded} new sample fund(s).`);
   console.info('Next: open the web app and sign up. The first account in this AY becomes the adviser.');
 }
 

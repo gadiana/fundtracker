@@ -30,7 +30,7 @@ settingsRouter.patch('/', requireOpenAy, async (req, res) => {
   const { db, ay, actor } = ctxOf(req);
   const before = await loadSettings(req);
   const branding = BRANDING_KEYS.filter((k) => k in patch && patch[k] !== before[k]);
-  if (branding.length) throw forbidden('Only the superadmin can change the organization’s name, description and logos.', 'SUPERADMIN_ONLY');
+  if (branding.length) throw forbidden('The organization’s name and logos are set by the developers in the system’s code.', 'SET_IN_CODE');
 
   if (patch.yearLevelCount !== undefined && patch.yearLevelCount < before.yearLevelCount) {
     const n = patch.yearLevelCount;

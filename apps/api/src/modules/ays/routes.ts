@@ -4,6 +4,7 @@ import { prisma } from '../../db';
 import { actorFrom, writeAudit, type Actor } from '../../lib/audit';
 import { COUNTER_KEYS } from '../../lib/defaults';
 import { badRequest, conflict, forbidden, notFound, uuidParam } from '../../lib/http';
+import { applyBranding } from '../../lib/branding';
 import { getCurrentAy, invalidateSecurityCache } from '../../lib/settings';
 import { requireAuth } from '../../middleware/auth';
 import { ayContext, ctxOf, requireAdviser, requireOpenAy } from '../../middleware/ay';
@@ -190,6 +191,8 @@ aysRouter.post('/:id/setup', async (req, res) => {
   const body = setupAySchema.parse(req.body);
   const source = await authorizeSetup(req.user!.id, target, body.sourceAyId);
   const summary = await runSetup({ target, source, options: body.options, actor: adviserActor(req), req });
+  // the organization's name and logos always come from src/branding.ts
+  await applyBranding(target.id);
   res.json({ summary, me: await buildMe(req.user!.id) });
 });
 

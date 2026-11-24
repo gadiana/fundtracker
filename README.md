@@ -32,15 +32,12 @@ Requires **Node.js 22+** and **PostgreSQL 16**.
    npm run db:migrate
    npm run db:seed
    ```
-4. Create the superadmin account (it asks for the email, name and password):
-   ```bash
-   npm run superadmin
-   ```
+4. Put your organization's name in `apps/api/src/branding.ts`, and its logo (optional) in `apps/api/branding/`.
 5. Start the app:
    ```bash
    npm run dev
    ```
-6. Open http://localhost:5173, sign in as the superadmin and add the adviser(s) under **Advisers**. Officers sign up and wait for an adviser's approval.
+6. Open http://localhost:5173 and sign up. The first account becomes the **adviser** and sets up the academic year. Officers sign up after that and wait for the adviser's approval.
 
 ## Commands
 
@@ -50,4 +47,3 @@ Requires **Node.js 22+** and **PostgreSQL 16**.
 | `npm test` | Run the tests |
 | `npm run build` | Build for production |
 | `npm start` | Run the production build |
-| `npm run superadmin` | Create the superadmin account |
