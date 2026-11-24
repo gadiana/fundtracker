@@ -9,7 +9,6 @@ import {
   registerAndLogin,
   resetDb,
   signupBody,
-  superadminClient,
   tokenFromMail,
 } from './helpers';
 
@@ -24,43 +23,36 @@ beforeEach(async () => {
 });
 
 describe('signup and approval', () => {
-  it('never makes anyone adviser by signing up: everyone waits for approval', async () => {
-    const c = await Client.create();
-    const first = expectStatus(await c.post('/auth/signup', signupBody('first@test.ph')), 201);
-    expect(first.body).toMatchObject({ role: null, status: 'pending' });
-    const clients = await Promise.all(Array.from({ length: 5 }, () => Client.create()));
+  it('makes the first sign-up the adviser, even when several sign up at once; everyone after waits for approval', async () => {
+    const clients = await Promise.all(Array.from({ length: 6 }, () => Client.create()));
     (await Promise.all(clients.map((x, i) => x.post('/auth/signup', signupBody(`race${i}@test.ph`))))).forEach((r) => expectStatus(r, 201));
+    expect(await prisma.userAyRole.count({ where: { academicYearId: ayId, role: 'adviser', status: 'active' } })).toBe(1);
+    expect(await prisma.userAyRole.count({ where: { academicYearId: ayId, status: 'pending' } })).toBe(5);
 
-    expect(await prisma.userAyRole.count({ where: { academicYearId: ayId, role: 'adviser' } })).toBe(0);
-    expect(await prisma.userAyRole.count({ where: { academicYearId: ayId, status: 'pending' } })).toBe(6);
+    const late = expectStatus(await (await Client.create()).post('/auth/signup', signupBody('late@test.ph')), 201);
+    expect(late.body).toMatchObject({ role: null, status: 'pending' });
   });
 
-  it('lets the superadmin add advisers (more than one), who must set their own password first', async () => {
-    const superadmin = await superadminClient();
-    const added = expectStatus(
-      await superadmin.post('/admin/advisers', { firstName: 'Maria', lastName: 'Santos', email: 'maria@test.ph', password: 'Start1ngPassword', academicYearId: ayId }),
-      201,
-    ).body;
-    expect(added).toMatchObject({ name: 'Maria Santos', status: 'active', newAccount: true, mustChangePassword: true, academicYear: { id: ayId } });
-    expectStatus(await superadmin.post('/admin/advisers', { firstName: 'Jose', lastName: 'Reyes', email: 'jose@test.ph', password: 'Start1ngPassword', academicYearId: ayId }), 201);
-    expect(await prisma.userAyRole.count({ where: { academicYearId: ayId, role: 'adviser', status: 'active' } })).toBe(2);
-    expect((await superadmin.post('/admin/advisers', { firstName: 'Maria', lastName: 'Santos', email: 'maria@test.ph', academicYearId: ayId })).body.error.code).toBe('ALREADY_ADVISER');
-    expect((await superadmin.post('/admin/advisers', { firstName: 'Weak', lastName: 'Pass', email: 'weak@test.ph', password: 'short', academicYearId: ayId })).body.error.code).toBe('WEAK_PASSWORD');
+  it('creates the current academic year on a brand-new installation, with the first sign-up as its adviser', async () => {
+    await resetDb();
+    const c = await Client.create();
+    const first = expectStatus(await c.post('/auth/signup', signupBody('first@test.ph')), 201).body;
+    expect(first).toMatchObject({ role: 'adviser', status: 'active' });
+    const ay = await prisma.academicYear.findFirstOrThrow({ where: { isCurrent: true } });
+    expect(first.academicYear).toBe(ay.label);
+    expect(ay.endYear).toBe(ay.startYear + 1);
+    expect(await prisma.ayCounter.count({ where: { academicYearId: ay.id } })).toBeGreaterThan(0);
 
-    // the new adviser can only change their password until they do
-    const maria = await Client.create();
-    expectStatus(await maria.post('/auth/login', { email: 'maria@test.ph', password: 'Start1ngPassword' }), 200);
-    expect((await maria.get('/auth/me')).body.user.mustChangePassword).toBe(true);
-    expect((await maria.get('/members?status=pending')).body.error.code).toBe('PASSWORD_CHANGE_REQUIRED');
-    expect((await maria.post('/me/password', { currentPassword: 'Start1ngPassword', newPassword: 'Start1ngPassword' })).body.error.code).toBe('SAME_PASSWORD');
-    expectStatus(await maria.post('/me/password', { currentPassword: 'Start1ngPassword', newPassword: 'MariaOwnPassw0rd' }), 200);
-    expect((await maria.get('/auth/me')).body.user.mustChangePassword).toBe(false);
-    expectStatus(await maria.get('/members?status=pending'), 200);
+    // they verify, sign in, and are asked to set the year up
+    expectStatus(await c.post('/auth/verify-email', { token: tokenFromMail('first@test.ph') }), 200);
+    expectStatus(await c.post('/auth/login', { email: 'first@test.ph', password: PASSWORD }), 200);
+    const me = expectStatus(await c.get('/auth/me'), 200).body;
+    expect(me.academicYears).toEqual([expect.objectContaining({ id: ay.id, needsSetup: true, membership: expect.objectContaining({ role: 'adviser' }) })]);
 
-    // advisers can't reach the superadmin's pages, and the superadmin can deactivate an adviser
-    expect((await maria.get('/admin/advisers')).body.error.code).toBe('SUPERADMIN_ONLY');
-    expectStatus(await superadmin.post(`/admin/advisers/${added.membershipId}/deactivate`), 200);
-    expect((await maria.get('/members?status=pending')).status).toBe(403);
+    // the second person waits for that adviser
+    const second = expectStatus(await (await Client.create()).post('/auth/signup', signupBody('second@test.ph')), 201).body;
+    expect(second).toMatchObject({ role: null, status: 'pending' });
+    expect(await prisma.academicYear.count()).toBe(1);
   });
 
   it('rejects duplicate emails, weak passwords and missing consent', async () => {

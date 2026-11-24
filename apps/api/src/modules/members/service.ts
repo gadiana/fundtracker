@@ -7,21 +7,42 @@ import { avatarUrl } from '../../lib/avatar';
 import { sendEvent } from '../../lib/events';
 import { findActiveAdvisers } from '../../lib/notify';
 
+export const FIRST_ADVISER_NOTE = 'First account in this academic year';
+
 /**
- * Adds a user to an academic year as "pending", to wait for an adviser's approval. Nobody
- * becomes adviser by signing up: advisers are added by the superadmin.
+ * Adds a user to an academic year. A brand-new account signing up into a year that has no adviser
+ * becomes its adviser (and sets the year up); everyone else waits as "pending" for the adviser's
+ * approval. An existing account asking to join another year always waits, so nobody can take
+ * over a year just by asking first.
  */
-export async function joinAcademicYear(tx: Prisma.TransactionClient, userId: string, academicYearId: string) {
-  const data = {
-    role: null,
-    designationId: null,
-    status: 'pending' as const,
-    requestedAt: new Date(),
-    decidedAt: null,
-    decidedById: null,
-    decidedByName: null,
-    decisionNote: null,
-  };
+export async function joinAcademicYear(tx: Prisma.TransactionClient, userId: string, academicYearId: string, { canBecomeAdviser = false } = {}) {
+  // one sign-up at a time per year, so two people can't both become its first adviser
+  await tx.$queryRaw`SELECT id FROM academic_years WHERE id = ${academicYearId}::uuid FOR UPDATE`;
+  const adviser = canBecomeAdviser
+    ? await tx.userAyRole.findFirst({ where: { academicYearId, role: 'adviser', status: 'active' }, select: { id: true } })
+    : true;
+  const now = new Date();
+  const data = adviser
+    ? {
+        role: null,
+        designationId: null,
+        status: 'pending' as const,
+        requestedAt: now,
+        decidedAt: null,
+        decidedById: null,
+        decidedByName: null,
+        decisionNote: null,
+      }
+    : {
+        role: 'adviser' as const,
+        designationId: null,
+        status: 'active' as const,
+        requestedAt: now,
+        decidedAt: now,
+        decidedById: null,
+        decidedByName: FIRST_ADVISER_NOTE,
+        decisionNote: null,
+      };
 
   const existing = await tx.userAyRole.findUnique({
     where: { academicYearId_userId: { academicYearId, userId } },
