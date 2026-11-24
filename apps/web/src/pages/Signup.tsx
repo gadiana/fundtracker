@@ -77,7 +77,11 @@ export function SignupPage() {
   return (
     <AuthLayout title="Create an account" wide>
       <form onSubmit={submit} className="space-y-4" noValidate>
-        {info && !info.initialized && <Alert tone="warning">The system isn't set up yet. Ask the administrator to run the database seed.</Alert>}
+        {info && !info.initialized && (
+          <Alert tone="info" title="You're the first to sign up">
+            Your account becomes the adviser. After you sign in, you'll set up the academic year; everyone who signs up after you waits for your approval.
+          </Alert>
+        )}
         {error && <Alert>{error}</Alert>}
 
         <div className="grid gap-4 sm:grid-cols-2">
