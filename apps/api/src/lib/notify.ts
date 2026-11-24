@@ -41,7 +41,7 @@ export async function collectorRecipients(academicYearId: string) {
   return rows.map((r) => ({ userId: r.userId, email: r.user.email, name: formatPersonName(r.user) }));
 }
 
-/** An academic year can have more than one adviser (the superadmin adds them). */
+/** An academic year can have more than one adviser. */
 export const findActiveAdvisers = (academicYearId: string) =>
   prisma.userAyRole.findMany({
     where: { academicYearId, role: 'adviser', status: 'active' },

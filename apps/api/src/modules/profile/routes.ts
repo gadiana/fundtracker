@@ -52,10 +52,7 @@ profileRouter.post('/password', async (req, res) => {
   const issues = passwordIssues(newPassword, passwordPolicy);
   if (issues.length) throw badRequest('WEAK_PASSWORD', 'Your new password does not meet the requirements.', { issues });
 
-  if (user.mustChangePassword && (await verifyPassword(user.passwordHash, newPassword))) {
-    throw badRequest('SAME_PASSWORD', 'Choose a password different from the one you were given.');
-  }
-  await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(newPassword), mustChangePassword: false } });
+  await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(newPassword) } });
   // sign out every other device; this one stays signed in
   await revokeAllSessions(user.id, req.sessionId);
 

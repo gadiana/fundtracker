@@ -30,9 +30,6 @@ export async function buildMe(userId: string) {
       emailVerified: Boolean(user.emailVerifiedAt),
       twoFactorEnabled: user.totpEnabled,
       avatarUrl: avatarUrl(user),
-      isSuperadmin: user.isSuperadmin,
-      /** the superadmin gave them a starting password: the app asks for a new one first */
-      mustChangePassword: user.mustChangePassword,
     },
     currentAyId: academicYears.find((ay) => ay.isCurrent)?.id ?? null,
     academicYears: academicYears.map((ay) => {
