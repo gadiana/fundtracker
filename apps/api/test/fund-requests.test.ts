@@ -301,7 +301,7 @@ describe('liquidation receipts', () => {
       { label: 'Receipts', value: 1, type: 'number' },
     ]);
     expect(doc.notes.join(' ')).toContain('PHP 50.00 was reimbursed to Paolo Lim');
-    expect(doc.signatories.map((s: { label: string }) => s.label)).toEqual(['Prepared by', 'Approved by', 'Noted by', 'Reimbursement received by']);
+    expect(doc.signatories.map((s: { label: string }) => s.label)).toEqual(['Prepared by', 'Approved by', 'Reimbursement received by']);
     expect(doc.annex.groups.map((g: { ref: string }) => g.ref)).toEqual(['R-1', 'Settlement']);
   });
 
@@ -453,7 +453,7 @@ describe('liquidation receipts', () => {
       ['R-1', 1],
       ['R-2', 1],
     ]);
-    expect(doc.signatories.map((s: { label: string }) => s.label)).toEqual(['Prepared by', 'Approved by', 'Noted by']);
+    expect(doc.signatories.map((s: { label: string }) => s.label)).toEqual(['Prepared by', 'Approved by']);
 
     // only people who may open the request
     expect((await collector.get(`/reports/liquidation?requestId=${id}`)).status).toBe(404);

@@ -14,7 +14,6 @@ const APPROVAL_KEYS = ['requestApprovalRule', 'liquidationApprovalRule'] as cons
 const RECEIPT_KEYS = ['receiptQrMessage', 'receiptFooterText'] as const;
 const USAGE_KEYS = ['requireRequestAttachment', 'requireLiquidationAttachment'] as const;
 const PUBLIC_KEYS = ['publicFields'] as const;
-const REPORT_KEYS = ['reportHeaderText', 'reportPreparedByName', 'reportPreparedByTitle', 'reportNotedByName', 'reportNotedByTitle', 'reportPaperSize'] as const;
 const EMAIL_KEYS = ['emailSenderName', 'emailSenderAddress', 'emailReplyTo'] as const;
 const SECURITY_KEYS = ['passwordMinLength', 'passwordRequireUpper', 'passwordRequireNumber', 'passwordRequireSymbol', 'twofaMode'] as const;
 const FILE_KEYS = ['uploadAllowedMime', 'uploadMaxBytes'] as const;
@@ -236,39 +235,6 @@ export function PublicPageSection({ settings }: Props) {
           </div>
         );
       }}
-    </SettingsCard>
-  );
-}
-
-export function ReportsSection({ settings }: Props) {
-  return (
-    <SettingsCard title="Printed reports" settings={settings} keys={REPORT_KEYS}>
-      {({ values, set, readOnly }) => (
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Header text" htmlFor="reportHeaderText" optional className="sm:col-span-2">
-            <Input id="reportHeaderText" value={values.reportHeaderText} disabled={readOnly} onChange={(e) => set('reportHeaderText', e.target.value)} />
-          </Field>
-          <Field label="Prepared by: name" htmlFor="prepName" optional>
-            <NullableInput id="prepName" value={values.reportPreparedByName} disabled={readOnly} onChange={(v) => set('reportPreparedByName', v)} />
-          </Field>
-          <Field label="Prepared by: title" htmlFor="prepTitle" optional>
-            <NullableInput id="prepTitle" value={values.reportPreparedByTitle} disabled={readOnly} placeholder="Treasurer" onChange={(v) => set('reportPreparedByTitle', v)} />
-          </Field>
-          <Field label="Noted by: name" htmlFor="notedName" optional>
-            <NullableInput id="notedName" value={values.reportNotedByName} disabled={readOnly} onChange={(v) => set('reportNotedByName', v)} />
-          </Field>
-          <Field label="Noted by: title" htmlFor="notedTitle" optional>
-            <NullableInput id="notedTitle" value={values.reportNotedByTitle} disabled={readOnly} placeholder="Adviser" onChange={(v) => set('reportNotedByTitle', v)} />
-          </Field>
-          <Field label="Paper size" htmlFor="paper">
-            <Select id="paper" value={values.reportPaperSize} disabled={readOnly} onChange={(e) => set('reportPaperSize', e.target.value as Settings['reportPaperSize'])}>
-              <option value="A4">A4</option>
-              <option value="LETTER">Letter (8.5 × 11 in)</option>
-              <option value="LEGAL">Legal (8.5 × 13 in)</option>
-            </Select>
-          </Field>
-        </div>
-      )}
     </SettingsCard>
   );
 }

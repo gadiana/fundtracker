@@ -466,6 +466,8 @@ model AySetting {
   reportNotedByName     String?   @map("report_noted_by_name") @db.VarChar(150)
   reportNotedByTitle    String?   @map("report_noted_by_title") @db.VarChar(150)
   reportPaperSize       PaperSize @default(A4) @map("report_paper_size")
+  /// per report kind: paper, letterhead (logos, header lines) and signatories; see reportFormatSchema
+  reportFormats         Json      @default("{}") @map("report_formats")
 
   // Email & notifications (SMTP credentials live in env, never here)
   emailSenderName    String? @map("email_sender_name") @db.VarChar(150)

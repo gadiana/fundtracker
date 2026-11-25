@@ -67,6 +67,7 @@ const LABELS: Record<string, string> = {
   requireLiquidationAttachment: 'Liquidations need an attachment',
   publicFields: 'Shown on the public verify page',
   reportPaperSize: 'Report paper size',
+  reportFormats: 'Report formats',
   passwordMinLength: 'Minimum password length',
   passwordRequireUpper: 'Passwords need upper and lower case',
   passwordRequireNumber: 'Passwords need a number',

@@ -2,7 +2,7 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { FileDown, Printer, Sheet } from 'lucide-react';
-import type { ReportAnnex, ReportDoc, ReportTable } from '@sft/shared';
+import type { ReportAnnex, ReportDoc, ReportHeader, ReportTable } from '@sft/shared';
 import { Alert, Button, Spinner, cx } from '../../components/ui';
 import { api, describeError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -85,19 +85,17 @@ export function ReportPrintPage() {
   );
 }
 
-export function ReportView({ doc }: { doc: ReportDoc }) {
-  const h = doc.header;
+/** The report; `preview` lays it on a sheet of paper (Settings → Reports) with the printed margins. */
+export function ReportView({ doc, preview }: { doc: ReportDoc; preview?: boolean }) {
   return (
-    <article className="mx-auto my-4 max-w-5xl bg-surface p-6 text-slate-900 shadow-sm sm:p-10 print:m-0 print:max-w-none print:p-0 print:shadow-none">
-      <header className="flex items-center gap-4 border-b border-slate-300 pb-4">
-        {h.logoUrl && <img src={h.logoUrl} alt="" className="size-14 object-contain" />}
-        <div className="min-w-0">
-          <p className="text-lg font-bold">{h.orgName}</p>
-          {(h.collegeName || h.schoolName) && <p className="text-sm text-slate-600">{[h.collegeName, h.schoolName].filter(Boolean).join(' · ')}</p>}
-          <p className="text-sm text-slate-600">Academic year {h.academicYear}</p>
-        </div>
-      </header>
-      {h.headerText && <p className="mt-3 whitespace-pre-line text-sm text-slate-700">{h.headerText}</p>}
+    <article
+      className={
+        preview
+          ? 'h-full bg-white p-[12mm] text-slate-900'
+          : 'mx-auto my-4 max-w-5xl bg-surface p-6 text-slate-900 shadow-sm sm:p-10 print:m-0 print:max-w-none print:p-0 print:shadow-none'
+      }
+    >
+      <LetterHead header={doc.header} />
 
       <h1 className="mt-5 text-xl font-bold">{doc.title}</h1>
       {doc.subtitle && <p className="text-sm font-medium text-slate-700">{doc.subtitle}</p>}
@@ -135,10 +133,11 @@ export function ReportView({ doc }: { doc: ReportDoc }) {
 
       <section
         className="mt-12 grid gap-8 sm:[grid-template-columns:var(--sig-cols)] print:[grid-template-columns:var(--sig-cols)] print:break-inside-avoid"
-        style={{ '--sig-cols': `repeat(${doc.signatories.length}, minmax(0, 1fr))` } as CSSProperties}
+        // at most three signatures a row
+        style={{ '--sig-cols': `repeat(${Math.min(3, Math.max(1, doc.signatories.length))}, minmax(0, 1fr))` } as CSSProperties}
       >
-        {doc.signatories.map((s) => (
-          <div key={s.label} className="text-sm">
+        {doc.signatories.map((s, i) => (
+          <div key={i} className="text-sm">
             <p className="text-slate-600">{s.label}</p>
             <div className="mt-10 border-b border-slate-400" />
             <p className="mt-1 font-semibold">{s.name || ' '}</p>
@@ -153,6 +152,41 @@ export function ReportView({ doc }: { doc: ReportDoc }) {
 
       {doc.annex && doc.annex.groups.length > 0 && <AnnexView annex={doc.annex} />}
     </article>
+  );
+}
+
+/**
+ * The header as the report's format sets it: logos on each side (the first one closest to the
+ * text) and the header lines between them. Both sides are as wide as the wider one, so centered
+ * text is centered on the page.
+ */
+export function LetterHead({ header: h }: { header: ReportHeader }) {
+  const side = Math.max(h.logosLeft.length, h.logosRight.length);
+  if (!side && !h.lines.length) return null;
+  const sideWidth = `calc(${side} * ${h.logoSize}pt + ${Math.max(0, side - 1)} * 0.5rem)`;
+  const logo = (url: string, i: number) => (
+    <img key={i} src={url} alt="" className="shrink-0 object-contain" style={{ width: `${h.logoSize}pt`, height: `${h.logoSize}pt` }} />
+  );
+  return (
+    <header className="flex items-center gap-4 border-b border-slate-300 pb-4">
+      {side > 0 && (
+        <div className="flex shrink-0 flex-row-reverse gap-2" style={{ width: sideWidth }}>
+          {h.logosLeft.map(logo)}
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        {h.lines.map((l, i) => (
+          <p key={i} className="whitespace-pre-line leading-snug" style={{ fontSize: `${l.size}pt`, fontWeight: l.bold ? 700 : 400, textAlign: l.align }}>
+            {l.text}
+          </p>
+        ))}
+      </div>
+      {side > 0 && (
+        <div className="flex shrink-0 gap-2" style={{ width: sideWidth }}>
+          {h.logosRight.map(logo)}
+        </div>
+      )}
+    </header>
   );
 }
 

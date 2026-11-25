@@ -1,5 +1,6 @@
 import type { AySetting } from '@prisma/client';
 import { PUBLIC_FIELDS_ALWAYS, PUBLIC_FIELDS_OPTIONAL, type PublicFieldOption } from '@sft/shared';
+import { reportFormats } from '../reports/formats';
 
 export type LogoKind = 'org' | 'receipt';
 
@@ -19,6 +20,7 @@ export function serializeSettings(s: AySetting) {
   return {
     ...rest,
     publicFields: optionalPublicFields(publicFields),
+    reportFormats: reportFormats(s),
     logoUrl: s.logoFileId ? logoUrl(s.academicYearId, 'org', s.logoFileId) : null,
     receiptLogoUrl: s.receiptLogoFileId ? logoUrl(s.academicYearId, 'receipt', s.receiptLogoFileId) : null,
   };

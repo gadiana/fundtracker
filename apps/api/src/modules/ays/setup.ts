@@ -12,6 +12,7 @@ import { writeAudit, type Actor } from '../../lib/audit';
 import { randomToken } from '../../lib/crypto';
 import { COUNTER_KEYS, DEFAULT_DESIGNATIONS, defaultPrivacyConsent } from '../../lib/defaults';
 import { badRequest, conflict, forbidden, notFound } from '../../lib/http';
+import { reportLogoFileIds } from '../reports/formats';
 
 type Db = Prisma.TransactionClient | PrismaClient;
 
@@ -231,8 +232,15 @@ export async function runSetup(input: {
           notificationEvents,
           publicFields,
           uploadAllowedMime,
+          reportFormats,
           ...plain
         } = src.settings;
+        // report logos are files of the old AY: the new AY gets its own records of them
+        const logoCopies = new Map<string, string>();
+        for (const id of reportLogoFileIds(reportFormats)) logoCopies.set(id, (await copyFileRecord(tx, id, T))!);
+        const copiedFormats = JSON.parse(JSON.stringify(reportFormats ?? {}), (key, value) =>
+          (key === 'logosLeft' || key === 'logosRight') && Array.isArray(value) ? value.map((l: string) => logoCopies.get(l) ?? l) : value,
+        );
         await tx.aySetting.create({
           data: {
             ...plain,
@@ -241,6 +249,7 @@ export async function runSetup(input: {
             notificationEvents: notificationEvents as Prisma.InputJsonValue,
             publicFields: publicFields as Prisma.InputJsonValue,
             uploadAllowedMime: uploadAllowedMime as Prisma.InputJsonValue,
+            reportFormats: copiedFormats as Prisma.InputJsonValue,
             logoFileId: await copyFileRecord(tx, logoFileId, T),
             receiptLogoFileId: await copyFileRecord(tx, receiptLogoFileId, T),
             updatedById: actor.id,
