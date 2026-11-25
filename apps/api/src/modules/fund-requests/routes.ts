@@ -112,13 +112,21 @@ fundRequestsRouter.get('/options', async (req, res) => {
 const listQuery = z.object({
   scope: z.enum(['mine', 'inbox', 'all', 'archived']).default('mine'),
   status: z.enum(FUND_REQUEST_STATUSES).optional(),
-  /** request: everything up to the decision; liquidation: approved requests and their receipts */
-  stage: z.enum(['request', 'liquidation']).optional(),
+  /**
+   * request: everything up to the decision; liquidation: approved requests and their receipts;
+   * reimbursement: requests where the fund pays the requestor back what they spent above the approved amount
+   */
+  stage: z.enum(['request', 'liquidation', 'reimbursement']).optional(),
 });
 
 /** Where a request is shown once it's approved: the Liquidations page. */
 const LIQUIDATION_STATUSES = ['approved', 'receipt_submitted', 'revision_requested', 'settlement_due', 'cleared'] as const;
 const isLiquidationStage = (status: string) => (LIQUIDATION_STATUSES as readonly string[]).includes(status);
+const owesReimbursement = (r: RequestWithAll) => r.liquidations.at(-1)?.settlementKind === 'reimburse';
+
+/** Which page waits on the request: a reimbursement still to pay is on Reimbursements, not Liquidations. */
+const stageOf = (r: RequestWithAll) =>
+  r.status === 'settlement_due' && owesReimbursement(r) ? 'reimbursement' : isLiquidationStage(r.status) ? 'liquidation' : 'request';
 
 /** For each request: is it waiting for this user's decision (on the request or its latest receipt)? */
 async function waitingFor(academicYearId: string, userId: string, perms: readonly string[], rows: RequestWithAll[]) {
@@ -153,12 +161,18 @@ fundRequestsRouter.get('/counts', async (req, res) => {
   const userId = req.user!.id;
   const rows = await db.fundRequest.findMany({ where: { fund: visibleFundsWhere(perms), ...awaitingDecision }, include: requestInclude });
   const waiting = await waitingFor(ay.id, userId, perms, rows);
-  const liquidations = rows.filter((r) => waiting.has(r.id) && isLiquidationStage(r.status)).length;
+  const waitingIn = (stage: string) => rows.filter((r) => waiting.has(r.id) && stageOf(r) === stage).length;
   // approved requests of this user that still need a liquidation (or a revised one)
   const toLiquidate = await db.fundRequest.count({
     where: { requestorId: userId, archivedAt: null, status: { in: ['approved', 'revision_requested'] }, fund: visibleFundsWhere(perms) },
   });
-  res.json({ toApprove: waiting.size, requests: waiting.size - liquidations, liquidations, toLiquidate });
+  res.json({
+    toApprove: waiting.size,
+    requests: waitingIn('request'),
+    liquidations: waitingIn('liquidation'),
+    reimbursements: waitingIn('reimbursement'),
+    toLiquidate,
+  });
 });
 
 fundRequestsRouter.get('/', async (req, res) => {
@@ -170,6 +184,8 @@ fundRequestsRouter.get('/', async (req, res) => {
   const where: Prisma.FundRequestWhereInput = {
     fund: visibleFundsWhere(perms),
     ...(q.status ? { status: q.status } : q.stage === 'liquidation' ? { status: { in: [...LIQUIDATION_STATUSES] } } : {}),
+    // owed (settlement due) or already paid back
+    ...(q.stage === 'reimbursement' ? { status: { in: ['settlement_due', 'cleared'] }, liquidations: { some: { settlementKind: 'reimburse' } } } : {}),
     // archived requests only appear in the Archived list: the adviser sees all of them, others their own
     archivedAt: q.scope === 'archived' ? { not: null } : null,
     ...(q.scope === 'mine' || (q.scope === 'archived' && !perms.includes('manage')) ? { requestorId: userId } : {}),
@@ -188,7 +204,8 @@ fundRequestsRouter.get('/', async (req, res) => {
     const latest = r.liquidations.at(-1);
     const needsMyAction = waiting.has(r.id);
     if (q.scope === 'inbox' && !needsMyAction) continue;
-    if (q.scope === 'inbox' && q.stage && isLiquidationStage(r.status) !== (q.stage === 'liquidation')) continue;
+    if (q.scope === 'inbox' && q.stage && stageOf(r) !== q.stage) continue;
+    if (q.stage === 'reimbursement' && !owesReimbursement(r)) continue;
     items.push({
       id: r.id,
       requestNo: r.requestNo,
@@ -207,6 +224,7 @@ fundRequestsRouter.get('/', async (req, res) => {
       receiptSubmittedAt: latest?.submittedAt ?? null,
       receiptApprovedAt: latest?.approvedAt ?? null,
       archivedAt: r.archivedAt,
+      settlement: latest?.settlementKind ? { kind: latest.settlementKind, amount: Number(latest.settlementAmount), settledAt: latest.settledAt } : null,
       needsMyAction,
     });
   }

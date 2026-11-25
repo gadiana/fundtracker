@@ -682,6 +682,8 @@ export interface FundRequestRow {
   receiptSubmittedAt: string | null;
   receiptApprovedAt: string | null;
   archivedAt: string | null;
+  /** what is owed after the receipt was approved (or was settled) */
+  settlement: { kind: 'reimburse' | 'return'; amount: number; settledAt: string | null } | null;
   needsMyAction: boolean;
 }
 

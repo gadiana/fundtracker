@@ -275,6 +275,30 @@ describe('liquidation receipts', () => {
     expect(r.liquidations[0]).toMatchObject({ chargedAmount: 10_000n, settlementKind: null });
   });
 
+  it('lists what the fund owes on Reimbursements (not under Liquidations), until it is paid', async () => {
+    const id = await approved(20_000);
+    const back = await approved(20_000); // returns change instead: stays under Liquidations
+    expectStatus(await president.post(`/fund-requests/${id}/liquidations`, oneReceipt(25_000, [await upload(president)])), 201);
+    expectStatus(await president.post(`/fund-requests/${back}/liquidations`, oneReceipt(15_000, [await upload(president)])), 201);
+    for (const rid of [id, back]) {
+      const lid = (await prisma.liquidationReceipt.findFirstOrThrow({ where: { fundRequestId: rid } })).id;
+      expectStatus(await adviser.post(`/fund-requests/${rid}/liquidations/${lid}/approve`, rid === id ? { overAmount: 'reimburse' } : {}), 200);
+    }
+    const ids = async (c: Client, query: string) => expectStatus(await c.get(`/fund-requests?${query}`), 200).body.items.map((r: { id: string }) => r.id);
+    expect(expectStatus(await collector.get('/fund-requests/counts'), 200).body).toMatchObject({ reimbursements: 1, liquidations: 1 });
+    expect(await ids(collector, 'scope=inbox&stage=reimbursement')).toEqual([id]);
+    expect(await ids(collector, 'scope=inbox&stage=liquidation')).toEqual([back]);
+    const owed = expectStatus(await president.get('/fund-requests?scope=mine&stage=reimbursement'), 200).body.items;
+    expect(owed).toMatchObject([{ id, settlement: { kind: 'reimburse', amount: 5_000, settledAt: null } }]);
+
+    expectStatus(await collector.post(`/fund-requests/${id}/settle`, { note: 'Paid in cash', attachmentId: null }), 200);
+    expect(expectStatus(await collector.get('/fund-requests/counts'), 200).body.reimbursements).toBe(0);
+    expect(await ids(collector, 'scope=inbox&stage=reimbursement')).toEqual([]);
+    // still listed for the requestor and the adviser, as paid
+    expect(await ids(president, 'scope=mine&stage=reimbursement')).toEqual([id]);
+    expect(await ids(adviser, 'scope=all&stage=reimbursement')).toEqual([id]);
+  });
+
   it('reimburses the excess when the approver accepts the higher amount, with the signed slip in the report', async () => {
     const id = await approved(20_000);
     expectStatus(await president.post(`/fund-requests/${id}/liquidations`, oneReceipt(25_000, [await upload(president)])), 201);

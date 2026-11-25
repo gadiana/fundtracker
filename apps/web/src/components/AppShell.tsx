@@ -7,6 +7,7 @@ import {
   CalendarRange,
   Check,
   FileText,
+  HandCoins,
   GraduationCap,
   History,
   LayoutDashboard,
@@ -56,6 +57,7 @@ const NAV: { label?: string; items: NavItem[] }[] = [
       { to: '/funds', label: 'Funds', icon: Wallet, permission: 'view_funds' },
       { to: '/requests', label: 'Fund requests', icon: FileText },
       { to: '/liquidations', label: 'Liquidations', icon: ReceiptText },
+      { to: '/reimbursements', label: 'Reimbursements', icon: HandCoins },
     ],
   },
   {
@@ -258,7 +260,11 @@ export function AppShell() {
   const unreadCount = unread.data?.count ?? 0;
   const counts = useRequestCounts().data;
   // the red number beside a menu item: what waits for this user there
-  const badges: Record<string, number> = { '/requests': counts?.requests ?? 0, '/liquidations': (counts?.liquidations ?? 0) + (counts?.toLiquidate ?? 0) };
+  const badges: Record<string, number> = {
+    '/requests': counts?.requests ?? 0,
+    '/liquidations': (counts?.liquidations ?? 0) + (counts?.toLiquidate ?? 0),
+    '/reimbursements': counts?.reimbursements ?? 0,
+  };
   const setupAvailable = canRunSetup(me, ay);
   const showWizard = Boolean(ay) && setupAvailable && (wizardRequested || !wizardDismissed.includes(ay!.id));
   const closeWizard = () => {
