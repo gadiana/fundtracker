@@ -1,7 +1,7 @@
 import { useState, type ChangeEvent } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { ChevronDown, ScrollText } from 'lucide-react';
-import { Alert, Badge, Button, Card, EmptyState, Field, Input, PageHeader, Select, Spinner, cx } from '../components/ui';
+import { ScrollText } from 'lucide-react';
+import { Alert, Badge, Button, Card, EmptyState, Field, Input, PageHeader, Select, Spinner } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
 import { formatDateTime, humanize } from '../lib/format';
 import { useAuth } from '../lib/auth';
@@ -10,6 +10,7 @@ import type { AuditEntry } from '../lib/types';
 const PAGE_SIZE = 25;
 
 const ACTION_TONE: Record<string, 'green' | 'red' | 'amber' | 'blue' | 'gray'> = {
+  create: 'blue',
   approve: 'green',
   reactivate: 'green',
   reject: 'red',
@@ -18,15 +19,66 @@ const ACTION_TONE: Record<string, 'green' | 'red' | 'amber' | 'blue' | 'gray'> =
   deactivate: 'amber',
   cancel: 'amber',
   login_failed: 'amber',
-  settings_change: 'blue',
 };
 
-/** Adviser: the complete audit log of the academic year, with the data before and after each change. */
+/** Plain names for the filters. */
+const ACTION_LABEL: Record<string, string> = {
+  create: 'Added',
+  update: 'Edited',
+  delete: 'Removed',
+  approve: 'Approved',
+  reject: 'Rejected',
+  deactivate: 'Deactivated',
+  reactivate: 'Reactivated',
+  void: 'Voided',
+  cancel: 'Canceled',
+  archive: 'Archived',
+  unarchive: 'Unarchived',
+  login: 'Signed in',
+  login_failed: 'Failed sign-in',
+  logout: 'Signed out',
+  signup: 'Signed up',
+  settings_change: 'Changed settings',
+  request_access: 'Asked to join',
+  password_change: 'Changed password',
+  password_reset: 'Reset password',
+  verify_email: 'Confirmed email',
+};
+
+const TYPE_LABEL: Record<string, string> = {
+  user: 'Accounts and sign-ins',
+  user_session: 'Sign-in safety',
+  user_ay_role: 'Staff access',
+  two_factor: 'Two-factor sign-in',
+  approver: 'Approvers',
+  program: 'Programs',
+  section: 'Sections',
+  designation: 'Positions',
+  designation_order: 'Position order',
+  settings: 'Settings',
+  academic_year: 'Academic years',
+  ay_setup: 'Year setup',
+  student: 'Students',
+  student_import: 'Student imports',
+  enrollment_link: 'Enrollment links',
+  fund: 'Funds',
+  fund_priority: 'Fund order',
+  fund_adjustment: 'Fund adjustments',
+  payment: 'Payments',
+  receipt_email: 'Emailed receipts',
+  email_retry: 'Emails sent again',
+  fund_request: 'Fund requests',
+  liquidation_receipt: 'Liquidations',
+};
+
+const actionLabel = (a: string) => ACTION_LABEL[a] ?? humanize(a);
+const typeLabel = (t: string) => TYPE_LABEL[t] ?? humanize(t);
+
+/** Adviser: everything that happened in the academic year, each as a plain sentence. */
 export function AuditLogPage() {
   const { ay } = useAuth();
   const [filters, setFilters] = useState({ action: '', entityType: '', q: '', from: '', to: '' });
   const [page, setPage] = useState(1);
-  const [expanded, setExpanded] = useState<string | null>(null);
 
   const options = useQuery({ queryKey: ['audit', ay?.id, 'filters'], queryFn: () => api<{ actions: string[]; entityTypes: string[] }>('/audit/filters') });
 
@@ -47,28 +99,29 @@ export function AuditLogPage() {
     setPage(1);
   };
   const totalPages = Math.max(1, Math.ceil((log.data?.total ?? 0) / PAGE_SIZE));
+  const byLabel = (label: (v: string) => string) => (a: string, b: string) => label(a).localeCompare(label(b));
 
   return (
     <>
-      <PageHeader title="Activity log" />
+      <PageHeader title="Activity log" description="Everything done in this academic year, newest first." />
 
       <Card className="mb-4 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Field label="Action" htmlFor="f-action">
+        <Field label="What was done" htmlFor="f-action">
           <Select id="f-action" value={filters.action} onChange={update('action')}>
-            <option value="">All actions</option>
-            {options.data?.actions.map((a) => (
+            <option value="">Everything</option>
+            {[...(options.data?.actions ?? [])].sort(byLabel(actionLabel)).map((a) => (
               <option key={a} value={a}>
-                {humanize(a)}
+                {actionLabel(a)}
               </option>
             ))}
           </Select>
         </Field>
-        <Field label="Record type" htmlFor="f-entity">
+        <Field label="About" htmlFor="f-entity">
           <Select id="f-entity" value={filters.entityType} onChange={update('entityType')}>
-            <option value="">All types</option>
-            {options.data?.entityTypes.map((t) => (
+            <option value="">Anything</option>
+            {[...(options.data?.entityTypes ?? [])].sort(byLabel(typeLabel)).map((t) => (
               <option key={t} value={t}>
-                {humanize(t)}
+                {typeLabel(t)}
               </option>
             ))}
           </Select>
@@ -94,48 +147,32 @@ export function AuditLogPage() {
             <Alert>{errorMessage(log.error)}</Alert>
           </div>
         ) : log.data?.items.length === 0 ? (
-          <EmptyState icon={ScrollText} title="No matching entries" />
+          <EmptyState icon={ScrollText} title="Nothing found" />
         ) : (
           <ul className="divide-y divide-slate-100">
-            {log.data?.items.map((entry) => {
-              const isOpen = expanded === entry.id;
-              const hasData = entry.before != null || entry.after != null;
-              return (
-                <li key={entry.id}>
-                  <button
-                    type="button"
-                    className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-slate-50 disabled:cursor-default disabled:hover:bg-transparent"
-                    onClick={() => setExpanded(isOpen ? null : entry.id)}
-                    disabled={!hasData}
-                    aria-expanded={hasData ? isOpen : undefined}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge tone={ACTION_TONE[entry.action] ?? 'gray'}>{humanize(entry.action)}</Badge>
-                        <span className="text-sm text-slate-700">{humanize(entry.entityType)}</span>
-                        {(entry.after as { selfApproved?: boolean } | null)?.selfApproved && <Badge tone="amber">Self-approved</Badge>}
-                      </div>
-                      <p className="mt-1 text-sm">
-                        <span className="font-medium text-slate-900">{entry.actorName}</span>
-                        {(entry.actorDesignation || entry.actorRole) && <span className="text-slate-500"> · {entry.actorDesignation ?? humanize(entry.actorRole!)}</span>}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {formatDateTime(entry.createdAt)}
-                        {entry.device && ` · ${entry.device}`}
-                        {entry.ipAddress && ` · ${entry.ipAddress}`}
-                      </p>
-                    </div>
-                    {hasData && <ChevronDown className={cx('mt-1 size-4 shrink-0 text-slate-400 transition-transform', isOpen && 'rotate-180')} aria-hidden />}
-                  </button>
-                  {isOpen && (
-                    <div className="grid gap-3 px-4 pb-4 sm:grid-cols-2">
-                      <JsonBlock label="Before" value={entry.before} />
-                      <JsonBlock label="After" value={entry.after} />
-                    </div>
-                  )}
-                </li>
-              );
-            })}
+            {log.data?.items.map((entry) => (
+              <li key={entry.id} className="px-4 py-3">
+                <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
+                  <p className="min-w-0 flex-1 text-sm font-medium text-slate-900">{entry.summary}</p>
+                  <Badge tone={ACTION_TONE[entry.action] ?? 'gray'}>{typeLabel(entry.entityType)}</Badge>
+                </div>
+                {entry.details.length > 0 && (
+                  <ul className="mt-1.5 space-y-0.5 border-l-2 border-slate-200 pl-3 text-sm text-slate-600">
+                    {entry.details.map((d, i) => (
+                      <li key={i} className="break-words">
+                        {d}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="mt-1.5 text-xs text-slate-500">
+                  {formatDateTime(entry.createdAt)}
+                  {entry.actorDesignation && ` · ${entry.actorDesignation}`}
+                  {entry.device && ` · ${entry.device}`}
+                  {entry.ipAddress && <span title="Internet address the change came from"> · {entry.ipAddress}</span>}
+                </p>
+              </li>
+            ))}
           </ul>
         )}
       </Card>
@@ -160,15 +197,6 @@ export function Pager({ page, totalPages, total, pageSize, setPage }: { page: nu
           Next
         </Button>
       </div>
-    </div>
-  );
-}
-
-function JsonBlock({ label, value }: { label: string; value: unknown }) {
-  return (
-    <div className="min-w-0">
-      <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <pre className="max-h-64 overflow-auto rounded-lg bg-slate-50 p-3 text-xs text-slate-700 ring-1 ring-slate-200">{value == null ? '—' : JSON.stringify(value, null, 2)}</pre>
     </div>
   );
 }
