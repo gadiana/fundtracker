@@ -603,7 +603,7 @@ export async function liquidationReport(ctx: ReportContext, requestId: string): 
         rows: entries.map((e) => ({
           ref: receiptRef(e.sortOrder),
           receiptDate: day(e.receiptDate),
-          receiptNo: e.receiptNo,
+          receiptNo: e.hasReceipt ? e.receiptNo : 'No receipt',
           payee: e.payee,
           usedFor: e.usedFor,
           items: e.items.length,
@@ -614,7 +614,7 @@ export async function liquidationReport(ctx: ReportContext, requestId: string): 
       },
       ...entries.map(
         (e): ReportTable => ({
-          title: [`${receiptRef(e.sortOrder)} · ${e.usedFor}`, e.payee, e.receiptNo && `OR ${e.receiptNo}`, formatReportCell(day(e.receiptDate), 'date', ctx.settings.timezone)]
+          title: [`${receiptRef(e.sortOrder)} · ${e.usedFor}`, e.payee, e.hasReceipt ? e.receiptNo && `OR ${e.receiptNo}` : 'no receipt', formatReportCell(day(e.receiptDate), 'date', ctx.settings.timezone)]
             .filter(Boolean)
             .join(' · '),
           columns: [
@@ -649,7 +649,7 @@ export async function liquidationReport(ctx: ReportContext, requestId: string): 
           .filter((e) => e.attachments.length)
           .map((e) => ({
             ref: receiptRef(e.sortOrder),
-            caption: [e.usedFor, e.payee, e.receiptNo && `OR ${e.receiptNo}`, formatReportCell(day(e.receiptDate), 'date', ctx.settings.timezone), `PHP ${centavosPlain(Number(e.total))}`]
+            caption: [e.usedFor, e.payee, e.hasReceipt ? e.receiptNo && `OR ${e.receiptNo}` : 'no receipt', formatReportCell(day(e.receiptDate), 'date', ctx.settings.timezone), `PHP ${centavosPlain(Number(e.total))}`]
               .filter(Boolean)
               .join(' · '),
             files: e.attachments.map((a) => ({ url: `/api/files/${a.file.id}`, name: a.file.originalName, mimeType: a.file.mimeType })),

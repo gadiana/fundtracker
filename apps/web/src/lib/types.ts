@@ -589,6 +589,8 @@ export interface LiquidationReceiptEntry {
   /** R-1, R-2… */
   ref: string;
   usedFor: string;
+  /** false for expenses without an official receipt (gas, fares, ...) */
+  hasReceipt: boolean;
   payee: string | null;
   receiptNo: string | null;
   /** yyyy-mm-dd */

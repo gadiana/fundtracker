@@ -132,6 +132,7 @@ export const entryView = (e: EntryWithAll) => ({
   id: e.id,
   ref: receiptRef(e.sortOrder),
   usedFor: e.usedFor,
+  hasReceipt: e.hasReceipt,
   payee: e.payee,
   receiptNo: e.receiptNo,
   receiptDate: e.receiptDate.toISOString().slice(0, 10),
