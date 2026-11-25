@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { errorMessage } from '../lib/api';
 import { Alert, Button, Field, Textarea } from './ui';
+import { lockScroll } from '../lib/scrollLock';
 
 export interface ConfirmDialogProps {
   open: boolean;
@@ -51,15 +52,14 @@ export function ConfirmDialog({
     setError(null);
     setBusy(false);
     const previouslyFocused = document.activeElement as HTMLElement | null;
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlock = lockScroll();
     // focus the first field, or the cancel button
     requestAnimationFrame(() => {
       const target = panelRef.current?.querySelector<HTMLElement>('select, textarea, input, [data-autofocus]');
       target?.focus();
     });
     return () => {
-      document.body.style.overflow = overflow;
+      unlock();
       previouslyFocused?.focus?.();
     };
   }, [open]);
