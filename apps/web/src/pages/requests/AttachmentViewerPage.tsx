@@ -115,7 +115,7 @@ export function AttachmentViewerPage() {
           <img
             src={p.src}
             alt={`${p.file.name}${p.pdfPage ? `, page ${p.pdfPage}` : ''} (${i + 1} of ${list.length})`}
-            className="max-h-full max-w-full bg-white object-contain"
+            className="max-h-full max-w-full bg-surface object-contain"
           />
         </section>
       ))}

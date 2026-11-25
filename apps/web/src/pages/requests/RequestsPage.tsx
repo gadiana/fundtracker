@@ -69,7 +69,7 @@ export function RequestsPage() {
             onClick={() => setParams({ tab: t.key })}
             className={cx(
               'flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium',
-              scope === t.key ? 'bg-white shadow-sm' : 'text-slate-600 hover:text-slate-900',
+              scope === t.key ? 'bg-surface shadow-sm' : 'text-slate-600 hover:text-slate-900',
             )}
           >
             {t.label}

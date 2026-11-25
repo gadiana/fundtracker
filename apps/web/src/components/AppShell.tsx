@@ -5,6 +5,7 @@ import {
   Activity,
   Banknote,
   CalendarRange,
+  Check,
   FileText,
   GraduationCap,
   History,
@@ -12,9 +13,12 @@ import {
   Lock,
   LogOut,
   Menu,
+  Monitor,
+  Moon,
   Printer,
   ScrollText,
   Settings as SettingsIcon,
+  Sun,
   UserCircle,
   Users,
   Wallet,
@@ -24,6 +28,7 @@ import type { Permission } from '@sft/shared';
 import { api, describeError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { canRunSetup } from '../lib/setup';
+import { ACCENTS, useTheme, type ThemeMode } from '../lib/theme';
 import { NoAccess } from '../pages/NoAccess';
 import { useRequestCounts } from '../pages/requests/RequestsPage';
 import { Avatar } from './Avatar';
@@ -128,7 +133,7 @@ function UserMenu() {
         <Avatar name={me.user.name} url={me.user.avatarUrl} size="sm" />
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 top-full z-40 mt-2 w-64 overflow-hidden rounded-xl bg-white shadow-lg ring-1 ring-slate-200">
+        <div role="menu" className="absolute right-0 top-full z-40 mt-2 w-64 overflow-hidden rounded-xl bg-surface shadow-lg ring-1 ring-slate-200">
           <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3">
             <Avatar name={me.user.name} url={me.user.avatarUrl} size="md" />
             <div className="min-w-0">
@@ -136,7 +141,8 @@ function UserMenu() {
               <p className="truncate text-xs text-slate-500">{position ?? me.user.email}</p>
             </div>
           </div>
-          <div className="p-1">
+          <AppearancePicker />
+          <div className="border-t border-slate-100 p-1">
             <Link role="menuitem" to="/profile" className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm hover:bg-slate-100">
               <UserCircle className="size-4 text-slate-500" aria-hidden /> Profile
             </Link>
@@ -158,6 +164,59 @@ function UserMenu() {
   );
 }
 
+const MODES: { id: ThemeMode; label: string; icon: typeof Sun }[] = [
+  { id: 'light', label: 'Light', icon: Sun },
+  { id: 'dark', label: 'Dark', icon: Moon },
+  { id: 'system', label: 'Auto', icon: Monitor },
+];
+
+/** Light, dark or the device's setting, and the accent color. Saved in this browser. */
+function AppearancePicker() {
+  const [theme, setTheme] = useTheme();
+  return (
+    <div className="space-y-2.5 px-4 py-3">
+      <p className="text-xs font-medium text-slate-500">Appearance</p>
+      <div role="radiogroup" aria-label="Light or dark" className="grid grid-cols-3 gap-1 rounded-lg bg-slate-100 p-1">
+        {MODES.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            role="radio"
+            aria-checked={theme.mode === id}
+            onClick={() => setTheme({ mode: id })}
+            className={cx(
+              'flex items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-medium transition-colors',
+              theme.mode === id ? 'bg-surface text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800',
+            )}
+          >
+            <Icon className="size-3.5" aria-hidden /> {label}
+          </button>
+        ))}
+      </div>
+      <div role="radiogroup" aria-label="Accent color" className="flex flex-wrap gap-2">
+        {ACCENTS.map((a) => (
+          <button
+            key={a.id}
+            type="button"
+            role="radio"
+            aria-checked={theme.accent === a.id}
+            aria-label={a.label}
+            title={a.label}
+            onClick={() => setTheme({ accent: a.id })}
+            className={cx(
+              'grid size-6 place-items-center rounded-full ring-offset-2 ring-offset-surface transition-transform hover:scale-110',
+              theme.accent === a.id && 'ring-2 ring-slate-400',
+            )}
+            style={{ backgroundColor: a.swatch }}
+          >
+            {theme.accent === a.id && <Check className="size-3.5 text-white" aria-hidden />}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function AppShell() {
   const { me, ay, isActiveMember, can } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -174,6 +233,19 @@ export function AppShell() {
   });
 
   useEffect(() => setDrawerOpen(false), [location.pathname]);
+
+  // while the phone menu is open: the page behind doesn't scroll, and Escape closes it
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setDrawerOpen(false);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = overflow;
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [drawerOpen]);
 
   const groups = [
     ...NAV.map((g) => ({ ...g, items: isActiveMember ? g.items.filter((i) => !i.permission || can(i.permission)) : [] })),
@@ -250,21 +322,33 @@ export function AppShell() {
 
   return (
     <div className="min-h-dvh md:pl-64 print:pl-0">
-      <aside className="no-print fixed inset-y-0 left-0 hidden w-64 flex-col border-r border-slate-200 bg-white p-4 md:flex">{sidebar}</aside>
+      <aside className="no-print fixed inset-y-0 left-0 hidden w-64 flex-col border-r border-slate-200 bg-surface p-4 md:flex">{sidebar}</aside>
 
-      {drawerOpen && (
-        <div className="fixed inset-0 z-40 md:hidden">
-          <div className="absolute inset-0 bg-slate-900/40" onClick={() => setDrawerOpen(false)} aria-hidden />
-          <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-white p-4 shadow-xl">
-            <button type="button" onClick={() => setDrawerOpen(false)} className="absolute right-3 top-4 rounded-md p-1 text-slate-500 hover:bg-slate-100" aria-label="Close menu">
-              <X className="size-5" />
-            </button>
-            {sidebar}
-          </div>
+      {/* phone menu: always in the page so it can slide in and out */}
+      <div className={cx('no-print fixed inset-0 z-40 md:hidden', !drawerOpen && 'pointer-events-none')} inert={!drawerOpen} aria-hidden={!drawerOpen}>
+        <div
+          className={cx('absolute inset-0 bg-black/40 transition-opacity duration-300 ease-out motion-reduce:transition-none', drawerOpen ? 'opacity-100' : 'opacity-0')}
+          onClick={() => setDrawerOpen(false)}
+          aria-hidden
+        />
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Menu"
+          className={cx(
+            'absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-surface p-4 shadow-xl will-change-transform',
+            'transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none',
+            drawerOpen ? 'translate-x-0' : '-translate-x-full',
+          )}
+        >
+          <button type="button" onClick={() => setDrawerOpen(false)} className="absolute right-3 top-4 rounded-md p-1 text-slate-500 hover:bg-slate-100" aria-label="Close menu">
+            <X className="size-5" />
+          </button>
+          {sidebar}
         </div>
-      )}
+      </div>
 
-      <header className="no-print sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
+      <header className="no-print sticky top-0 z-30 border-b border-slate-200 bg-surface/90 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-4">
           <button type="button" onClick={() => setDrawerOpen(true)} className="-ml-1 rounded-md p-1.5 text-slate-600 hover:bg-slate-100 md:hidden" aria-label="Open menu">
             <Menu className="size-5" />

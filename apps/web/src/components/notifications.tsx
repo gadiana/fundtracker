@@ -80,7 +80,7 @@ export function NotificationBell({ unreadCount }: { unreadCount: number }) {
         <div
           role="dialog"
           aria-label="Latest notifications"
-          className="fixed inset-x-2 top-14 z-40 overflow-hidden rounded-xl bg-white shadow-xl ring-1 ring-slate-200 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-96"
+          className="fixed inset-x-2 top-14 z-40 overflow-hidden rounded-xl bg-surface shadow-xl ring-1 ring-slate-200 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-96"
         >
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
             <p className="text-sm font-semibold">Notifications</p>

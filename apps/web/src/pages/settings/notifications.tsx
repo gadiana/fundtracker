@@ -354,7 +354,7 @@ function TemplateEditor({
                 <Mail className="size-3.5" aria-hidden /> {rendered.subject}
               </p>
               {/* sandboxed: nothing in the preview can run */}
-              <iframe title="Email preview" sandbox="" srcDoc={preview} className="h-72 w-full bg-white" />
+              <iframe title="Email preview" sandbox="" srcDoc={preview} className="h-72 w-full bg-surface" />
             </div>
           ) : (
             <div className="flex gap-3 rounded-lg border border-slate-200 p-3">

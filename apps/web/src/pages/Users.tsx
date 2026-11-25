@@ -88,7 +88,7 @@ export function UsersPage() {
             onClick={() => setParams({ tab: t.key })}
             className={cx(
               'flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium',
-              tab === t.key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900',
+              tab === t.key ? 'bg-surface text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900',
             )}
           >
             {t.label}

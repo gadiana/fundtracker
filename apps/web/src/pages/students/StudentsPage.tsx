@@ -93,10 +93,10 @@ export function StudentsPage() {
         actions={
           !readOnly && (
             <>
-              <Link to="/students/enrollment" className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium hover:bg-slate-50">
+              <Link to="/students/enrollment" className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-surface px-4 text-sm font-medium hover:bg-slate-50">
                 <QrCode className="size-4" aria-hidden /> Enrollment QR
               </Link>
-              <Link to="/students/import" className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium hover:bg-slate-50">
+              <Link to="/students/import" className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-surface px-4 text-sm font-medium hover:bg-slate-50">
                 <FileUp className="size-4" aria-hidden /> Import CSV
               </Link>
               <Button onClick={() => setAdding(true)} disabled={!meta.data}>
@@ -120,7 +120,7 @@ export function StudentsPage() {
             }}
             className={cx(
               'flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium',
-              tab === t.key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900',
+              tab === t.key ? 'bg-surface text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900',
             )}
           >
             {t.label}

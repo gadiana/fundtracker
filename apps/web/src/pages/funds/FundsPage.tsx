@@ -152,7 +152,7 @@ export function FundsPage() {
                 onDragStart={() => setDragId(f.id)}
                 onDragOver={(e) => onDragOver(e, f.id)}
                 onDragEnd={() => setDragId(null)}
-                className={cx('rounded-xl border border-slate-200 bg-white shadow-sm', dragId === f.id && 'opacity-50 ring-2 ring-brand-500')}
+                className={cx('rounded-xl border border-slate-200 bg-surface shadow-sm', dragId === f.id && 'opacity-50 ring-2 ring-brand-500')}
               >
                 <div className="flex items-stretch">
                   {canManage && (

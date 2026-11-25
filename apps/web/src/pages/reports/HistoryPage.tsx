@@ -107,7 +107,7 @@ export function HistoryPage() {
               role="tab"
               aria-selected={tab === t.key}
               onClick={() => setParams({ tab: t.key })}
-              className={cx('shrink-0 rounded-md px-3 py-1.5 text-sm font-medium', tab === t.key ? 'bg-white shadow-sm' : 'text-slate-600 hover:text-slate-900')}
+              className={cx('shrink-0 rounded-md px-3 py-1.5 text-sm font-medium', tab === t.key ? 'bg-surface shadow-sm' : 'text-slate-600 hover:text-slate-900')}
             >
               {t.label}
             </button>
@@ -149,7 +149,7 @@ function ExportButtons({ kind, query }: { kind: 'collections' | 'fund-usage'; qu
         href={`/print/report/${kind}?${query}`}
         target="_blank"
         rel="noreferrer"
-        className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium hover:bg-slate-50"
+        className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-300 bg-surface px-3 text-sm font-medium hover:bg-slate-50"
       >
         <Printer className="size-4" aria-hidden /> Print / PDF
       </a>
@@ -232,7 +232,7 @@ function Pager({ page, total, setPage }: { page: number; total: number; setPage:
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg bg-white px-3 py-2 ring-1 ring-slate-200">
+    <div className="rounded-lg bg-surface px-3 py-2 ring-1 ring-slate-200">
       <p className="text-xs text-slate-500">{label}</p>
       <p className="font-semibold tabular-nums">{value}</p>
     </div>

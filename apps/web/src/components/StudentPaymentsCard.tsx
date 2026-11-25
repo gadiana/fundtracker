@@ -87,7 +87,7 @@ export function StudentQrPanel({
         Printed on every receipt. It opens a private status page (name and Cleared / Has Balance). It never contains the student number.
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
-        <a href={qr.verifyPath} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium hover:bg-slate-50">
+        <a href={qr.verifyPath} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 bg-surface px-3 text-sm font-medium hover:bg-slate-50">
           <ExternalLink className="size-4" aria-hidden /> Status page
         </a>
         {canRotate && (

@@ -81,7 +81,7 @@ export function NotificationsPage() {
             role="tab"
             aria-selected={filter === t.key}
             onClick={() => setParams(t.key === 'all' ? {} : { filter: t.key })}
-            className={cx('flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium', filter === t.key ? 'bg-white shadow-sm' : 'text-slate-600 hover:text-slate-900')}
+            className={cx('flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium', filter === t.key ? 'bg-surface shadow-sm' : 'text-slate-600 hover:text-slate-900')}
           >
             {t.label}
             {t.key === 'unread' && unreadCount > 0 && <span className="rounded-full bg-brand-600 px-1.5 text-xs text-white">{unreadCount}</span>}

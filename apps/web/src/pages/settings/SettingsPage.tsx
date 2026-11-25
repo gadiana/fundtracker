@@ -105,7 +105,7 @@ export function SettingsPage() {
                   aria-current={active.id === id ? 'page' : undefined}
                   className={cx(
                     'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm',
-                    active.id === id ? 'bg-white font-medium text-brand-700 shadow-sm ring-1 ring-slate-200' : 'text-slate-600 hover:bg-white/70',
+                    active.id === id ? 'bg-surface font-medium text-brand-700 shadow-sm ring-1 ring-slate-200' : 'text-slate-600 hover:bg-surface/70',
                   )}
                 >
                   <Icon className="size-4 shrink-0" aria-hidden />

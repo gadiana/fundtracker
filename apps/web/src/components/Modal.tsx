@@ -47,7 +47,7 @@ export function Modal({
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
-      <div className="absolute inset-0 bg-slate-900/50" aria-hidden onClick={() => closable && onClose()} />
+      <div className="absolute inset-0 bg-black/50" aria-hidden onClick={() => closable && onClose()} />
       <div
         ref={panelRef}
         tabIndex={-1}
@@ -55,7 +55,7 @@ export function Modal({
         aria-modal="true"
         aria-labelledby={titleId}
         className={cx(
-          'relative flex max-h-[92dvh] w-full flex-col rounded-t-2xl bg-white shadow-xl outline-none sm:rounded-2xl',
+          'relative flex max-h-[92dvh] w-full flex-col rounded-t-2xl bg-surface shadow-xl outline-none sm:rounded-2xl',
           size === 'lg' ? 'max-w-2xl' : 'max-w-md',
         )}
       >

@@ -44,7 +44,7 @@ export function ReportPrintPage() {
   }
 
   return (
-    <div className="min-h-dvh bg-slate-100 print:bg-white">
+    <div className="force-light min-h-dvh bg-slate-100 print:bg-white">
       <style>{`@page { size: ${PAGE_SIZE[doc.paperSize]} ${isLandscape(doc) ? 'landscape' : 'portrait'}; margin: 12mm; }`}</style>
       <div className="no-print sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 bg-slate-900 px-4 py-2 text-white">
         <p className="truncate text-sm font-medium">{doc.title}</p>
@@ -88,7 +88,7 @@ export function ReportPrintPage() {
 export function ReportView({ doc }: { doc: ReportDoc }) {
   const h = doc.header;
   return (
-    <article className="mx-auto my-4 max-w-5xl bg-white p-6 text-slate-900 shadow-sm sm:p-10 print:m-0 print:max-w-none print:p-0 print:shadow-none">
+    <article className="mx-auto my-4 max-w-5xl bg-surface p-6 text-slate-900 shadow-sm sm:p-10 print:m-0 print:max-w-none print:p-0 print:shadow-none">
       <header className="flex items-center gap-4 border-b border-slate-300 pb-4">
         {h.logoUrl && <img src={h.logoUrl} alt="" className="size-14 object-contain" />}
         <div className="min-w-0">

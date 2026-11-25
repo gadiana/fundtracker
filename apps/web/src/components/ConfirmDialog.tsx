@@ -89,13 +89,13 @@ export function ConfirmDialog({
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
-      <div className="absolute inset-0 bg-slate-900/50" aria-hidden onClick={() => !busy && onClose()} />
+      <div className="absolute inset-0 bg-black/50" aria-hidden onClick={() => !busy && onClose()} />
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative w-full max-w-md rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl"
+        className="relative w-full max-w-md rounded-t-2xl bg-surface p-5 shadow-xl sm:rounded-2xl"
       >
         <div className="mb-3 flex items-start justify-between gap-4">
           <h2 id={titleId} className="text-lg font-semibold text-slate-900">

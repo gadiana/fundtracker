@@ -162,7 +162,7 @@ export function TwoFactorCard() {
           </p>
           <ul className="my-3 grid grid-cols-2 gap-2 font-mono text-sm sm:grid-cols-4">
             {recovery.map((c) => (
-              <li key={c} className="rounded bg-white px-2 py-1 text-center ring-1 ring-amber-200">
+              <li key={c} className="rounded bg-surface px-2 py-1 text-center ring-1 ring-amber-200">
                 {c}
               </li>
             ))}
