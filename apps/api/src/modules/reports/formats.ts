@@ -14,6 +14,8 @@ export function defaultReportFormat(kind: ReportKind, s: AySetting): ReportForma
     logosLeft: s.logoFileId ? ['org'] : [],
     logosRight: [],
     logoSize: 56,
+    logoPlacement: 'edges',
+    logoGap: 12,
     headerLines: [
       { text: s.orgName || 'Fund Tracker', bold: true, size: 16, align: 'center' },
       ...(school ? [{ text: school, bold: false, size: 11, align: 'center' as const }] : []),

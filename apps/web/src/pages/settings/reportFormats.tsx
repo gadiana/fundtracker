@@ -76,7 +76,7 @@ function FormatEditor({
         REPORT_KINDS.map((k) => [
           k,
           // signatories differ per report, so they stay
-          { ...formats[k], paperSize: f.paperSize, logosLeft: f.logosLeft, logosRight: f.logosRight, logoSize: f.logoSize, headerLines: f.headerLines },
+          { ...formats[k], paperSize: f.paperSize, logosLeft: f.logosLeft, logosRight: f.logosRight, logoSize: f.logoSize, logoPlacement: f.logoPlacement, logoGap: f.logoGap, headerLines: f.headerLines },
         ]),
       ) as Record<ReportKind, ReportFormat>,
     );
@@ -140,6 +140,32 @@ function FormatEditor({
                 className="w-full accent-brand-600"
               />
             </Field>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Where the logos sit" htmlFor="format-logo-placement">
+                <Select
+                  id="format-logo-placement"
+                  value={f.logoPlacement}
+                  disabled={readOnly}
+                  onChange={(e) => update({ logoPlacement: e.target.value as ReportFormat['logoPlacement'] })}
+                >
+                  <option value="beside">Beside the header text</option>
+                  <option value="edges">At the edges of the page</option>
+                </Select>
+              </Field>
+              <Field label={`Space between logos and text: ${f.logoGap} pt`} htmlFor="format-logo-gap">
+                <input
+                  id="format-logo-gap"
+                  type="range"
+                  min={0}
+                  max={144}
+                  step={2}
+                  value={f.logoGap}
+                  disabled={readOnly}
+                  onChange={(e) => update({ logoGap: Number(e.target.value) })}
+                  className="w-full accent-brand-600"
+                />
+              </Field>
+            </div>
           </Group>
 
           <Group title="Header text" hint={<>One or more lines between the logos. Write {'{year}'} for the academic year.</>}>
@@ -485,6 +511,8 @@ function sampleDoc(kind: ReportKind, f: ReportFormat, settings: Settings, academ
       logosLeft: logos(f.logosLeft),
       logosRight: logos(f.logosRight),
       logoSize: f.logoSize,
+      logoPlacement: f.logoPlacement,
+      logoGap: f.logoGap,
       lines: f.headerLines.filter((l) => l.text).map((l) => ({ ...l, text: fillHeaderText(l.text, academicYear) })),
     },
     signatories: [

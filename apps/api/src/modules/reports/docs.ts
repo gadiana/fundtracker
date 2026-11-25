@@ -68,6 +68,8 @@ function base(kind: ReportKind, ctx: ReportContext, rest: Pick<ReportDoc, 'filte
       logosLeft: logos(format.logosLeft),
       logosRight: logos(format.logosRight),
       logoSize: format.logoSize,
+      logoPlacement: format.logoPlacement,
+      logoGap: format.logoGap,
       lines: format.headerLines.filter((l) => l.text).map((l) => ({ ...l, text: fillHeaderText(l.text, ctx.ay.label) })),
     },
     signatories: [

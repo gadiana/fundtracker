@@ -158,23 +158,25 @@ export function ReportView({ doc, preview }: { doc: ReportDoc; preview?: boolean
 /**
  * The header as the report's format sets it: logos on each side (the first one closest to the
  * text) and the header lines between them. Both sides are as wide as the wider one, so centered
- * text is centered on the page.
+ * text is centered on the page. Beside: the logos are next to the text, the space set between
+ * them; edges: the logos are at the page margins and the text fills the middle.
  */
 export function LetterHead({ header: h }: { header: ReportHeader }) {
   const side = Math.max(h.logosLeft.length, h.logosRight.length);
   if (!side && !h.lines.length) return null;
   const sideWidth = `calc(${side} * ${h.logoSize}pt + ${Math.max(0, side - 1)} * 0.5rem)`;
+  const beside = h.logoPlacement === 'beside';
   const logo = (url: string, i: number) => (
     <img key={i} src={url} alt="" className="shrink-0 object-contain" style={{ width: `${h.logoSize}pt`, height: `${h.logoSize}pt` }} />
   );
   return (
-    <header className="flex items-center gap-4 border-b border-slate-300 pb-4">
+    <header className={cx('flex items-center border-b border-slate-300 pb-4', beside && 'justify-center')} style={{ columnGap: `${h.logoGap}pt` }}>
       {side > 0 && (
-        <div className="flex shrink-0 flex-row-reverse gap-2" style={{ width: sideWidth }}>
+        <div className={cx('flex shrink-0 flex-row-reverse gap-2', !beside && 'justify-end')} style={{ width: sideWidth }}>
           {h.logosLeft.map(logo)}
         </div>
       )}
-      <div className="min-w-0 flex-1">
+      <div className={cx('min-w-0', beside ? 'flex-initial' : 'flex-1')}>
         {h.lines.map((l, i) => (
           <p key={i} className="whitespace-pre-line leading-snug" style={{ fontSize: `${l.size}pt`, fontWeight: l.bold ? 700 : 400, textAlign: l.align }}>
             {l.text}
@@ -182,7 +184,7 @@ export function LetterHead({ header: h }: { header: ReportHeader }) {
         ))}
       </div>
       {side > 0 && (
-        <div className="flex shrink-0 gap-2" style={{ width: sideWidth }}>
+        <div className={cx('flex shrink-0 gap-2', !beside && 'justify-end')} style={{ width: sideWidth }}>
           {h.logosRight.map(logo)}
         </div>
       )}

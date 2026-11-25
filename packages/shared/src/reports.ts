@@ -64,8 +64,15 @@ export interface ReportHeader {
   logosRight: string[];
   /** logo height in points (1/72 inch) */
   logoSize: number;
+  /** beside: the logos sit next to the text; edges: at the page margins */
+  logoPlacement: LogoPlacement;
+  /** space between the logos and the text, in points */
+  logoGap: number;
   lines: ReportHeaderLine[];
 }
+
+export const LOGO_PLACEMENTS = ['beside', 'edges'] as const;
+export type LogoPlacement = (typeof LOGO_PLACEMENTS)[number];
 
 export const HEADER_ALIGNMENTS = ['left', 'center', 'right'] as const;
 export type HeaderAlignment = (typeof HEADER_ALIGNMENTS)[number];

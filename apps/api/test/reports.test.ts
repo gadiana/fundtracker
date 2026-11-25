@@ -252,6 +252,8 @@ describe('report formats', () => {
       logosLeft: ['org', logo],
       logosRight: [logo],
       logoSize: 64,
+      logoPlacement: 'beside',
+      logoGap: 30,
       headerLines: [
         { text: 'Republic of the Philippines', bold: false, size: 10, align: 'center' },
         { text: 'Collections for {year}', bold: true, size: 14, align: 'left' },
@@ -268,7 +270,7 @@ describe('report formats', () => {
     const doc: ReportDoc = expectStatus(await collector.get('/reports/collections'), 200).body;
     expect(doc.paperSize).toBe('LEGAL');
     // the org has no logo in the tests, so only the uploaded one shows; the first is closest to the text
-    expect(doc.header).toMatchObject({ logosLeft: [`/api/public/ays/${ay.id}/report-logo/${logo}`], logosRight: [`/api/public/ays/${ay.id}/report-logo/${logo}`], logoSize: 64 });
+    expect(doc.header).toMatchObject({ logosLeft: [`/api/public/ays/${ay.id}/report-logo/${logo}`], logosRight: [`/api/public/ays/${ay.id}/report-logo/${logo}`], logoSize: 64, logoPlacement: 'beside', logoGap: 30 });
     expect(doc.header.lines).toEqual([
       { text: 'Republic of the Philippines', bold: false, size: 10, align: 'center' },
       { text: 'Collections for 2026-2027', bold: true, size: 14, align: 'left' },
@@ -287,6 +289,24 @@ describe('report formats', () => {
     const usage: ReportDoc = expectStatus(await adviser.get('/reports/fund-usage'), 200).body;
     expect(usage.paperSize).toBe('LETTER');
     expect(usage.header.logosLeft).toEqual([]);
+    // by default the logos are at the page edges, 12 pt from the text
+    expect(usage.header).toMatchObject({ logoPlacement: 'edges', logoGap: 12 });
+  });
+
+  it('keeps a format saved before the logo placement existed, with the logos at the edges', async () => {
+    const settings = expectStatus(await adviser.get('/settings'), 200).body;
+    const { logoPlacement: _p, logoGap: _g, ...old } = { ...settings.reportFormats.fund, paperSize: 'LEGAL' };
+    await prisma.aySetting.update({ where: { academicYearId: ay.id }, data: { reportFormats: { fund: old } } });
+    const fund = expectStatus(await adviser.get('/settings'), 200).body.reportFormats.fund;
+    expect(fund).toMatchObject({ paperSize: 'LEGAL', logoPlacement: 'edges', logoGap: 12 });
+
+    // moving the logos next to the text is logged in words
+    expectStatus(await adviser.patch('/settings', { reportFormats: { ...settings.reportFormats, fund: { ...fund, logoPlacement: 'beside', logoGap: 24 } } }), 200);
+    expect(expectStatus(await adviser.get('/audit?entityType=settings'), 200).body.items[0].details).toEqual([
+      'Fund report: logos at the page edges → beside the text',
+      'Fund report: space between logos and text 12 pt → 24 pt',
+    ]);
+    expect((await adviser.patch('/settings', { reportFormats: { ...settings.reportFormats, fund: { ...fund, logoGap: 200 } } })).status).toBe(400);
   });
 
   it('says in the activity log what changed in a report format, in words', async () => {
