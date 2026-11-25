@@ -6,7 +6,7 @@ import { COOKIES, verifyAccessToken } from '../lib/session';
 
 /**
  * Requires a valid access token AND a live server-side session. There is no idle timeout:
- * a session lasts until logout or until it expires (REFRESH_TOKEN_TTL_DAYS). Every request
+ * a session lasts until logout, or until it goes unused for REFRESH_TOKEN_TTL_DAYS. Every request
  * also records that the person is in the system (see lib/presence.ts).
  */
 export const requireAuth: RequestHandler = async (req, _res, next) => {

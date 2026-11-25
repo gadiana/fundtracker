@@ -14,7 +14,7 @@ const EnvSchema = z.object({
   WEB_URL: z.string().url().default('http://localhost:5173'),
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
   ACCESS_TOKEN_TTL_MIN: z.coerce.number().int().positive().default(15),
-  REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(7),
+  REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
   TRUST_PROXY: bool,
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
