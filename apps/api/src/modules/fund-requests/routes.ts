@@ -485,10 +485,10 @@ fundRequestsRouter.post('/:id/liquidations', requireOpenAy, async (req, res) => 
   const settings = await prisma.aySetting.findUniqueOrThrow({ where: { academicYearId: ay.id } });
   const today = localDate(settings.timezone);
   body.receipts.forEach((e, i) => {
-    if (settings.requireLiquidationAttachment && e.attachmentIds.length === 0) {
+    if (settings.requireLiquidationAttachment && e.hasReceipt && e.attachmentIds.length === 0) {
       throw badRequest('ATTACHMENT_REQUIRED', `Attach a photo or PDF of receipt ${receiptRef(i + 1)}.`);
     }
-    if (e.receiptDate > today) throw badRequest('FUTURE_RECEIPT', `Receipt ${receiptRef(i + 1)} is dated in the future.`);
+    if (e.receiptDate > today) throw badRequest('FUTURE_RECEIPT', `${receiptRef(i + 1)} is dated in the future.`);
   });
   const totals = body.receipts.map((e) => entryTotal(e.items));
   const fundUsed = totals.reduce((s, t) => s + t, 0);
@@ -522,8 +522,9 @@ fundRequestsRouter.post('/:id/liquidations', requireOpenAy, async (req, res) => 
           liquidationReceiptId: liquidation.id,
           sortOrder: i + 1,
           usedFor: e.usedFor,
+          hasReceipt: e.hasReceipt,
           payee: e.payee ?? null,
-          receiptNo: e.receiptNo ?? null,
+          receiptNo: e.hasReceipt ? (e.receiptNo ?? null) : null,
           receiptDate: new Date(`${e.receiptDate}T00:00:00Z`),
           total: BigInt(totals[i]!),
         },

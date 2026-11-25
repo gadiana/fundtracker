@@ -292,7 +292,7 @@ export function RequestDetailPage() {
             <Card className="space-y-4 p-5">
               <div>
                 <h2 className="font-semibold">{r.status === 'revision_requested' ? 'Revise the liquidation' : 'Liquidate'}</h2>
-                <p className="mt-0.5 text-sm text-slate-500">Add every official receipt and the items on it.</p>
+                <p className="mt-0.5 text-sm text-slate-500">Add every official receipt and the items on it, and any cost without a receipt (gas, fares, …).</p>
                 {latest?.revisionMessage && r.status === 'revision_requested' && (
                   <Alert tone="warning" className="mt-2" title={`Message from ${latest.revisionRequestedByName}`}>
                     {latest.revisionMessage}
@@ -462,6 +462,11 @@ function LiquidationItem({ requestId, l }: { requestId: string; l: Liquidation }
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
               <p className="text-sm font-medium">
                 <span className="font-mono">{e.ref}</span> · {e.usedFor}
+                {!e.hasReceipt && (
+                  <Badge tone="amber" className="ml-2">
+                    No receipt
+                  </Badge>
+                )}
               </p>
               <p className="text-xs text-slate-500">{[e.payee, e.receiptNo && `OR ${e.receiptNo}`, formatDate(`${e.receiptDate}T12:00:00+08:00`)].filter(Boolean).join(' · ')}</p>
             </div>
@@ -494,7 +499,7 @@ function LiquidationItem({ requestId, l }: { requestId: string; l: Liquidation }
                 </tr>
               </tfoot>
             </table>
-            <AttachmentLink requestId={requestId} set={e.id} files={e.attachments} label={`${e.ref} receipt`} />
+            <AttachmentLink requestId={requestId} set={e.id} files={e.attachments} label={e.hasReceipt ? `${e.ref} receipt` : `${e.ref} photo`} />
           </li>
         ))}
       </ul>

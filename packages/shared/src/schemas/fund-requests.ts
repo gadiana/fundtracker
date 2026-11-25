@@ -45,9 +45,14 @@ export const liquidationItemSchema = z.object({
   unitCost: centavos,
 });
 
-/** One official receipt: what it was for, where it's from, its items and its photos or PDF. */
+/**
+ * One expense: what it was for, where it's from, its items and its photos or PDF. Most come with an
+ * official receipt; some (gas, fares, ...) don't (`hasReceipt: false`), and then need no receipt
+ * number or photo.
+ */
 export const liquidationEntrySchema = z.object({
   usedFor: z.string().trim().min(2, 'Say what this receipt was for').max(200),
+  hasReceipt: z.boolean().default(true),
   payee: optionalNote(150),
   receiptNo: optionalNote(60),
   receiptDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Choose the receipt date'),

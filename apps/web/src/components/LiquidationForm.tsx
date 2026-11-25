@@ -17,6 +17,8 @@ interface ItemDraft {
 interface ReceiptDraft {
   key: number;
   usedFor: string;
+  /** false for gas, fares and other expenses that come without an official receipt */
+  hasReceipt: boolean;
   payee: string;
   receiptNo: string;
   receiptDate: string;
@@ -27,13 +29,14 @@ interface ReceiptDraft {
 let nextKey = 1;
 const todayInManila = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const emptyItem = (): ItemDraft => ({ key: nextKey++, description: '', quantity: '1', unitCost: null });
-const emptyReceipt = (): ReceiptDraft => ({ key: nextKey++, usedFor: '', payee: '', receiptNo: '', receiptDate: todayInManila(), items: [emptyItem()], files: [] });
+const emptyReceipt = (): ReceiptDraft => ({ key: nextKey++, usedFor: '', hasReceipt: true, payee: '', receiptNo: '', receiptDate: todayInManila(), items: [emptyItem()], files: [] });
 
 /** A revision starts from the receipts sent last time, files included. */
 const fromPrevious = (receipts: LiquidationReceiptEntry[]): ReceiptDraft[] =>
   receipts.map((r) => ({
     key: nextKey++,
     usedFor: r.usedFor,
+    hasReceipt: r.hasReceipt,
     payee: r.payee ?? '',
     receiptNo: r.receiptNo ?? '',
     receiptDate: r.receiptDate,
@@ -51,12 +54,12 @@ function problemsOf(receipts: ReceiptDraft[], needFiles: boolean, today: string)
   receipts.forEach((r, n) => {
     const ref = `R-${n + 1}`;
     if (r.usedFor.trim().length < 2) out.push(`${ref}: say what it was used for.`);
-    if (!r.receiptDate) out.push(`${ref}: choose the receipt date.`);
+    if (!r.receiptDate) out.push(`${ref}: choose the date.`);
     else if (r.receiptDate > today) out.push(`${ref}: the date can't be in the future.`);
     r.items.forEach((i, k) => {
       if (!i.description.trim() || !(qty(i) >= 1) || !i.unitCost || i.unitCost <= 0) out.push(`${ref}, item ${k + 1}: fill in the item, quantity and unit cost.`);
     });
-    if (needFiles && r.files.length === 0) out.push(`${ref}: add a photo or PDF of the receipt.`);
+    if (needFiles && r.hasReceipt && r.files.length === 0) out.push(`${ref}: add a photo or PDF of the receipt.`);
   });
   return out;
 }
@@ -92,8 +95,9 @@ export function LiquidationForm({
       remarks: remarks.trim() || null,
       receipts: receipts.map((r) => ({
         usedFor: r.usedFor.trim(),
+        hasReceipt: r.hasReceipt,
         payee: r.payee.trim() || null,
-        receiptNo: r.receiptNo.trim() || null,
+        receiptNo: (r.hasReceipt && r.receiptNo.trim()) || null,
         receiptDate: r.receiptDate,
         items: r.items.map((i) => ({ description: i.description.trim(), quantity: qty(i), unitCost: i.unitCost ?? 0 })),
         attachmentIds: r.files.map((f) => f.id),
@@ -111,7 +115,7 @@ export function LiquidationForm({
           <fieldset key={r.key} className="rounded-xl border border-slate-200 p-4">
             <div className="mb-3 flex items-center justify-between gap-2">
               <legend className="font-medium">
-                Receipt <span className="font-mono">{ref}</span>
+                {r.hasReceipt ? 'Receipt' : 'Expense'} <span className="font-mono">{ref}</span>
               </legend>
               {receipts.length > 1 && (
                 <Button size="sm" variant="ghost" className="text-red-700" onClick={() => setReceipts((list) => list.filter((x) => x.key !== r.key))}>
@@ -120,17 +124,45 @@ export function LiquidationForm({
               )}
             </div>
 
+            <div role="radiogroup" aria-label={`Does ${ref} have a receipt?`} className="mb-3 inline-flex rounded-lg bg-slate-100 p-0.5 text-sm">
+              {[
+                { value: true, label: 'With receipt' },
+                { value: false, label: 'No receipt (gas, fare, …)' },
+              ].map((o) => (
+                <button
+                  key={o.label}
+                  type="button"
+                  role="radio"
+                  aria-checked={r.hasReceipt === o.value}
+                  onClick={() => update(r.key, { hasReceipt: o.value })}
+                  className={cx(
+                    'rounded-md px-3 py-1 transition-colors',
+                    r.hasReceipt === o.value ? 'bg-surface font-medium text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900',
+                  )}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+            {!r.hasReceipt && (
+              <p className="mb-3 text-xs text-slate-500">
+                For costs that come without an official receipt, like gas, jeepney or tricycle fare, parking or tips. Say clearly what it was for; a photo (a ticket, the pump reading) is welcome but not needed.
+              </p>
+            )}
+
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Used for" htmlFor={`liq-${r.key}-for`}>
-                <Input id={`liq-${r.key}-for`} value={r.usedFor} onChange={(e) => update(r.key, { usedFor: e.target.value })} placeholder="e.g. Booth materials for the fair" maxLength={200} />
+                <Input id={`liq-${r.key}-for`} value={r.usedFor} onChange={(e) => update(r.key, { usedFor: e.target.value })} placeholder={r.hasReceipt ? 'e.g. Booth materials for the fair' : 'e.g. Gas for picking up the shirts'} maxLength={200} />
               </Field>
-              <Field label="Store / payee" htmlFor={`liq-${r.key}-payee`} optional>
+              <Field label={r.hasReceipt ? 'Store / payee' : 'Paid to'} htmlFor={`liq-${r.key}-payee`} optional>
                 <Input id={`liq-${r.key}-payee`} value={r.payee} onChange={(e) => update(r.key, { payee: e.target.value })} maxLength={150} />
               </Field>
-              <Field label="OR / receipt no." htmlFor={`liq-${r.key}-no`} optional>
-                <Input id={`liq-${r.key}-no`} value={r.receiptNo} onChange={(e) => update(r.key, { receiptNo: e.target.value })} maxLength={60} />
-              </Field>
-              <Field label="Receipt date" htmlFor={`liq-${r.key}-date`}>
+              {r.hasReceipt && (
+                <Field label="OR / receipt no." htmlFor={`liq-${r.key}-no`} optional>
+                  <Input id={`liq-${r.key}-no`} value={r.receiptNo} onChange={(e) => update(r.key, { receiptNo: e.target.value })} maxLength={60} />
+                </Field>
+              )}
+              <Field label={r.hasReceipt ? 'Receipt date' : 'Date spent'} htmlFor={`liq-${r.key}-date`}>
                 <Input id={`liq-${r.key}-date`} type="date" max={today} value={r.receiptDate} onChange={(e) => update(r.key, { receiptDate: e.target.value })} />
               </Field>
             </div>
@@ -180,13 +212,13 @@ export function LiquidationForm({
             </div>
 
             <div className="mt-3">
-              <Field label={`Photos or PDF of ${ref}`} htmlFor={`liq-${r.key}-files`} optional={!needFiles}>
+              <Field label={`Photos or PDF of ${ref}`} htmlFor={`liq-${r.key}-files`} optional={!needFiles || !r.hasReceipt}>
                 <FileUploader
                   files={r.files}
                   onChange={(files) => update(r.key, { files })}
                   allowedMime={allowedMime}
                   maxBytes={maxBytes}
-                  label="Add photos or a PDF of this receipt"
+                  label={r.hasReceipt ? 'Add photos or a PDF of this receipt' : 'Add a photo, if you have one'}
                 />
               </Field>
             </div>
@@ -200,7 +232,7 @@ export function LiquidationForm({
       })}
 
       <Button variant="secondary" onClick={() => setReceipts((list) => [...list, emptyReceipt()])}>
-        <Plus className="size-4" aria-hidden /> Add another receipt
+        <Plus className="size-4" aria-hidden /> Add another receipt or expense
       </Button>
 
       <dl className="space-y-1 rounded-xl bg-slate-50 p-4 text-sm">
@@ -209,7 +241,7 @@ export function LiquidationForm({
           <dd className="tabular-nums">{formatMoney(approvedAmount)}</dd>
         </div>
         <div className="flex justify-between font-semibold">
-          <dt>Total liquidated ({receipts.length} receipt{receipts.length > 1 ? 's' : ''})</dt>
+          <dt>Total liquidated ({receipts.length} {receipts.length > 1 ? 'entries' : 'entry'})</dt>
           <dd className="tabular-nums">{formatMoney(total)}</dd>
         </div>
         <div className={cx('flex justify-between border-t border-slate-200 pt-1', total > approvedAmount ? 'font-medium text-red-700' : 'text-slate-600')}>

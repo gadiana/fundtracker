@@ -936,6 +936,8 @@ model LiquidationEntry {
   sortOrder            Int      @map("sort_order") @db.SmallInt
   /// what this receipt's money was used for, e.g. "Booth for the fair"
   usedFor              String   @map("used_for") @db.VarChar(200)
+  /// false for expenses that come without an official receipt (gas, fares, ...)
+  hasReceipt           Boolean  @default(true) @map("has_receipt")
   payee                String?  @db.VarChar(150)
   receiptNo            String?  @map("receipt_no") @db.VarChar(60)
   receiptDate          DateTime @map("receipt_date") @db.Date

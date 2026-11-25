@@ -378,6 +378,30 @@ describe('liquidation receipts', () => {
     expect(await prisma.liquidationReceipt.count()).toBe(0);
   });
 
+  it('takes expenses without a receipt (gas, fares) with no receipt number or photo', async () => {
+    const id = await approved(500_00);
+    const body = {
+      receipts: [
+        { usedFor: 'Booth', receiptNo: 'OR-1', receiptDate: manilaDate(0), items: [{ description: 'Tarp', quantity: 1, unitCost: 200_00 }], attachmentIds: [await upload(president)] },
+        {
+          usedFor: 'Gas for picking up the tarp',
+          hasReceipt: false,
+          payee: 'Tricycle driver',
+          receiptNo: 'ignored',
+          receiptDate: manilaDate(0),
+          items: [{ description: 'Fare, round trip', quantity: 2, unitCost: 25_00 }],
+          attachmentIds: [],
+        },
+      ],
+    };
+    expectStatus(await president.post(`/fund-requests/${id}/liquidations`, body), 201);
+
+    const l = (await adviser.get(`/fund-requests/${id}`)).body.request.liquidations[0];
+    expect(l.fundUsed).toBe(250_00);
+    expect(l.receipts[0]).toMatchObject({ ref: 'R-1', hasReceipt: true, receiptNo: 'OR-1' });
+    expect(l.receipts[1]).toMatchObject({ ref: 'R-2', hasReceipt: false, receiptNo: null, payee: 'Tricycle driver', total: 50_00, attachments: [] });
+  });
+
   it('lets a revision reuse the files sent the first time, but not files of another request', async () => {
     const id = await approved(100_00);
     const photo = await upload(president);
