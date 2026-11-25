@@ -13,7 +13,7 @@ beforeEach(async () => {
 });
 
 describe('audit log', () => {
-  it('records signup, login and approval with before/after snapshots, shown in full to the adviser only', async () => {
+  it('records signup, login and approval, shown to the adviser only as plain sentences', async () => {
     const adviser = await registerAndLogin('adviser@test.ph');
     const c = await Client.create();
     expectStatus(await c.post('/auth/signup', signupBody('staff@test.ph', 'Carla', 'Reyes')), 201);
@@ -25,8 +25,9 @@ describe('audit log', () => {
     const actions = full.items.map((i: { action: string }) => i.action);
     expect(actions).toEqual(expect.arrayContaining(['signup', 'verify_email', 'login', 'approve']));
     const approve = full.items.find((i: { action: string }) => i.action === 'approve');
-    expect(approve.before).toMatchObject({ status: 'pending' });
-    expect(approve.after).toMatchObject({ status: 'active', designation: 'Collector' });
+    expect(approve.summary).toBe('Test User approved Carla Reyes as Collector');
+    expect(approve).not.toHaveProperty('before');
+    expect(approve).not.toHaveProperty('after');
     expect(approve.actorName).toBe('Test User');
     expect(approve.actorDesignation).toBe('Adviser');
 

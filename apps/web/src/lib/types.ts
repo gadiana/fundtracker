@@ -87,11 +87,11 @@ export interface AuditEntry {
   actorDesignation: string | null;
   action: string;
   entityType: string;
-  entityId: string | null;
-  before: unknown;
-  after: unknown;
+  /** a plain sentence, e.g. "Juan Dela Cruz added section A to BSIT 1st year" */
+  summary: string;
+  /** what changed, e.g. "Amount: ₱100.00 → ₱130.00" */
+  details: string[];
   ipAddress: string | null;
-  actorRole: string | null;
   device: string | null;
 }
 

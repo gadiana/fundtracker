@@ -6,10 +6,11 @@ import { prisma } from '../../db';
 import { describeDevice, OFFLINE_AFTER_MS, visitEnd } from '../../lib/presence';
 import { requireAuth } from '../../middleware/auth';
 import { ayContext, ctxOf, requireAdviser } from '../../middleware/ay';
+import { describeAudit } from './describe';
 
 /**
- * The adviser's logs for the selected AY: the complete audit log (every action, with the data
- * before and after, IP address and device) and the sign-in activity of the year's people.
+ * The adviser's logs for the selected AY: the complete audit log (every action as a plain
+ * sentence with what changed, the device and IP address) and the sign-in activity of the year's people.
  */
 export const auditRouter = Router();
 auditRouter.use(requireAuth, ayContext, requireAdviser);
@@ -40,21 +41,20 @@ auditRouter.get('/', async (req, res) => {
     prisma.auditLog.count({ where }),
     prisma.auditLog.findMany({ where, orderBy: { id: 'desc' }, skip: (query.page - 1) * query.pageSize, take: query.pageSize }),
   ]);
+  const described = await describeAudit(rows);
   res.json({
     total,
     page: query.page,
     pageSize: query.pageSize,
-    items: rows.map((r) => ({
+    items: rows.map((r, i) => ({
       id: r.id.toString(),
       createdAt: r.createdAt,
       actorName: r.actorName,
-      actorRole: r.actorRole,
-      actorDesignation: r.actorDesignation,
+      actorDesignation: r.actorRole === 'adviser' ? 'Adviser' : r.actorDesignation,
       action: r.action,
       entityType: r.entityType,
-      entityId: r.entityId,
-      before: r.beforeData,
-      after: r.afterData,
+      summary: described[i]!.summary,
+      details: described[i]!.details,
       ipAddress: r.ipAddress,
       device: r.userAgent ? describeDevice(r.userAgent) : null,
     })),
