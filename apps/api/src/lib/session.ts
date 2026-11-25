@@ -40,17 +40,20 @@ export function verifyAccessToken(token: string): AccessCheck {
   }
 }
 
+/** How long a session lasts without being used; every refresh starts the count again. */
+const sessionTtlMs = () => config.REFRESH_TOKEN_TTL_DAYS * 86_400_000;
+
+/**
+ * The access cookie outlives its token on purpose: the browser keeps sending it, so the server
+ * answers TOKEN_EXPIRED and the app refreshes quietly instead of treating the person as signed out.
+ */
+function setAccessCookie(res: Response, claims: AccessClaims) {
+  res.cookie(COOKIES.access, signAccessToken(claims), { ...baseCookie, path: '/', maxAge: sessionTtlMs() });
+}
+
 function setAuthCookies(res: Response, claims: AccessClaims, refreshToken: string) {
-  res.cookie(COOKIES.access, signAccessToken(claims), {
-    ...baseCookie,
-    path: '/',
-    maxAge: config.ACCESS_TOKEN_TTL_MIN * 60_000,
-  });
-  res.cookie(COOKIES.refresh, refreshToken, {
-    ...baseCookie,
-    path: REFRESH_PATH,
-    maxAge: config.REFRESH_TOKEN_TTL_DAYS * 86_400_000,
-  });
+  setAccessCookie(res, claims);
+  res.cookie(COOKIES.refresh, refreshToken, { ...baseCookie, path: REFRESH_PATH, maxAge: sessionTtlMs() });
 }
 
 export function clearAuthCookies(res: Response) {
@@ -67,7 +70,7 @@ export async function startSession(req: Request, res: Response, userId: string) 
       refreshTokenHash: sha256(refreshToken),
       userAgent: req.get('user-agent')?.slice(0, 500) ?? null,
       ipAddress: req.ip ?? null,
-      expiresAt: new Date(Date.now() + config.REFRESH_TOKEN_TTL_DAYS * 86_400_000),
+      expiresAt: new Date(Date.now() + sessionTtlMs()),
     },
   });
   setAuthCookies(res, { userId, sessionId: session.id }, refreshToken);
@@ -100,26 +103,25 @@ export async function lookupRefreshToken(raw: string): Promise<RefreshLookup> {
   return { kind: 'reused', sessionId: previous.id, userId: previous.userId };
 }
 
-/** Replaces the session's refresh token (the old one becomes "previous") and sets the new cookie. */
+/**
+ * Replaces the session's refresh token (the old one becomes "previous") and sets the new cookie.
+ * The session's end moves forward too, so someone who keeps using the system stays signed in.
+ */
 export async function rotateRefreshToken(res: Response, sessionId: string, oldRaw: string) {
   const next = randomToken();
   const done = await prisma.userSession.updateMany({
     where: { id: sessionId, refreshTokenHash: sha256(oldRaw), revokedAt: null },
-    data: { previousRefreshTokenHash: sha256(oldRaw), refreshTokenHash: sha256(next), rotatedAt: new Date() },
+    data: { previousRefreshTokenHash: sha256(oldRaw), refreshTokenHash: sha256(next), rotatedAt: new Date(), expiresAt: new Date(Date.now() + sessionTtlMs()) },
   });
   // another request rotated it a moment ago: keep that one
   if (done.count === 0) return false;
-  res.cookie(COOKIES.refresh, next, { ...baseCookie, path: REFRESH_PATH, maxAge: config.REFRESH_TOKEN_TTL_DAYS * 86_400_000 });
+  res.cookie(COOKIES.refresh, next, { ...baseCookie, path: REFRESH_PATH, maxAge: sessionTtlMs() });
   return true;
 }
 
 /** Issues a fresh access token for an existing session. */
 export function renewAccessCookie(res: Response, claims: AccessClaims) {
-  res.cookie(COOKIES.access, signAccessToken(claims), {
-    ...baseCookie,
-    path: '/',
-    maxAge: config.ACCESS_TOKEN_TTL_MIN * 60_000,
-  });
+  setAccessCookie(res, claims);
 }
 
 export async function revokeSession(id: string) {

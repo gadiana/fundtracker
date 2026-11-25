@@ -26,6 +26,7 @@ interface RequestOptions {
 let csrfToken: string | null = null;
 let selectedAyId: string | null = null;
 let refreshing: Promise<boolean> | null = null;
+const RENEWABLE = ['TOKEN_EXPIRED', 'UNAUTHENTICATED'];
 
 /** Every request carries the academic year selected in the AY switcher. */
 export function setApiAcademicYear(id: string | null) {
@@ -76,8 +77,9 @@ async function errorCode(res: Response) {
 export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   let res = await send(path, opts);
 
-  // short-lived access token expired: refresh once, then retry
-  if (res.status === 401 && path !== '/auth/refresh' && path !== '/auth/login' && (await errorCode(res)) === 'TOKEN_EXPIRED') {
+  // the short-lived access token expired (or the browser dropped it): renew it from the
+  // long-lived refresh cookie once, then retry, so an open session never ends by itself
+  if (res.status === 401 && path !== '/auth/refresh' && path !== '/auth/login' && RENEWABLE.includes((await errorCode(res)) ?? '')) {
     if (await refreshSession()) res = await send(path, opts);
   }
   // CSRF cookie was cleared or rotated: fetch a new token, then retry
