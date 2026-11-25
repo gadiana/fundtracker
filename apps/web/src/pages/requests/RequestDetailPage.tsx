@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, ArrowLeft, Check, ExternalLink, FileText, HandCoins, Lock, Paperclip, X } from 'lucide-react';
+import { Archive, ArchiveRestore, ArrowLeft, Check, ExternalLink, FileText, HandCoins, Lock, Paperclip, ReceiptText, X } from 'lucide-react';
 import type { LiquidationCreateInput } from '@sft/shared';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { FileUploader } from '../../components/FileUploader';
@@ -16,7 +16,16 @@ import { REQUEST_STATUS_TONE } from './RequestsPage';
 
 type Action = 'approve' | 'reject' | 'cancel' | 'submitReceipt' | 'approveReceipt' | 'revision' | 'settle' | 'archive' | 'unarchive';
 
-export function RequestDetailPage() {
+/** Approved requests and their receipts are handled on the Liquidations page. */
+const LIQUIDATION_STATUSES = ['approved', 'receipt_submitted', 'revision_requested', 'settlement_due', 'cleared'];
+
+/** The same request, opened from Liquidations: its receipts, their review and the settlement. */
+export function LiquidationDetailPage() {
+  return <RequestDetailPage mode="liquidation" />;
+}
+
+/** One fund request: the request and its approval (mode "request"), or its liquidation. */
+export function RequestDetailPage({ mode = 'request' }: { mode?: 'request' | 'liquidation' }) {
   const { id } = useParams();
   const { ay } = useAuth();
   const queryClient = useQueryClient();
@@ -88,6 +97,9 @@ export function RequestDetailPage() {
   const over = latest ? latest.fundUsed > latest.approvedAmount : false;
   const under = latest ? latest.fundUsed < latest.approvedAmount : false;
   const settlement = latest?.status === 'approved' ? latest.settlement : null;
+  const liquidationMode = mode === 'liquidation';
+  const inLiquidation = LIQUIDATION_STATUSES.includes(r.status) || r.liquidations.length > 0;
+  const linkButton = 'inline-flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-medium';
   const selfNote = viewer.isRequestor ? ' You filed this request, so your approval is recorded as self-approved.' : '';
   const dialogs: Record<Action, { title: string; description: ReactNode; confirmLabel: string; tone?: 'danger'; commentLabel?: string; commentRequired?: boolean; disabled?: boolean }> = {
     approve: {
@@ -152,15 +164,15 @@ export function RequestDetailPage() {
 
   return (
     <>
-      <Link to="/requests" className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-slate-600 hover:text-slate-900">
-        <ArrowLeft className="size-4" aria-hidden /> Fund requests
+      <Link to={liquidationMode ? '/liquidations' : '/requests'} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-slate-600 hover:text-slate-900">
+        <ArrowLeft className="size-4" aria-hidden /> {liquidationMode ? 'Liquidations' : 'Fund requests'}
       </Link>
 
       {/* actions on top, as approvers expect */}
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{r.requestNo}</h1>
+            <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{liquidationMode ? `Liquidation · ${r.requestNo}` : r.requestNo}</h1>
             <Badge tone={REQUEST_STATUS_TONE[r.status]}>{r.statusLabel}</Badge>
             {r.selfApproved && <Badge tone="amber">Self-approved</Badge>}
           </div>
@@ -170,7 +182,20 @@ export function RequestDetailPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {viewer.canDecide && (
+          {!liquidationMode && inLiquidation && (
+            <Link
+              to={`/liquidations/${r.id}`}
+              className={cx(linkButton, viewer.canSubmitReceipt ? 'bg-brand-600 text-white hover:bg-brand-700' : 'border border-slate-300 hover:bg-slate-50')}
+            >
+              <ReceiptText className="size-4" aria-hidden /> {viewer.canSubmitReceipt ? (r.status === 'revision_requested' ? 'Revise liquidation' : 'Liquidate') : 'Liquidation'}
+            </Link>
+          )}
+          {liquidationMode && (
+            <Link to={`/requests/${r.id}`} className={cx(linkButton, 'border border-slate-300 hover:bg-slate-50')}>
+              <FileText className="size-4" aria-hidden /> View request
+            </Link>
+          )}
+          {!liquidationMode && viewer.canDecide && (
             <>
               <Button onClick={() => setAction('approve')}>
                 <Check className="size-4" aria-hidden /> Confirm
@@ -180,7 +205,7 @@ export function RequestDetailPage() {
               </Button>
             </>
           )}
-          {viewer.canReviewReceipt && (
+          {liquidationMode && viewer.canReviewReceipt && (
             <>
               <Button
                 onClick={() => {
@@ -195,7 +220,7 @@ export function RequestDetailPage() {
               </Button>
             </>
           )}
-          {viewer.canSettle && settlement && (
+          {liquidationMode && viewer.canSettle && settlement && (
             <Button
               onClick={() => {
                 setProof([]);
@@ -205,17 +230,17 @@ export function RequestDetailPage() {
               <HandCoins className="size-4" aria-hidden /> {settlement.kind === 'reimburse' ? 'Mark as reimbursed' : 'Mark as returned'}
             </Button>
           )}
-          {viewer.canCancel && (
+          {!liquidationMode && viewer.canCancel && (
             <Button variant="ghost" onClick={() => setAction('cancel')}>
               Cancel request
             </Button>
           )}
-          {viewer.canArchive && (
+          {!liquidationMode && viewer.canArchive && (
             <Button variant="secondary" onClick={() => setAction('archive')}>
               <Archive className="size-4" aria-hidden /> Archive
             </Button>
           )}
-          {viewer.canUnarchive && (
+          {!liquidationMode && viewer.canUnarchive && (
             <Button variant="secondary" onClick={() => setAction('unarchive')}>
               <ArchiveRestore className="size-4" aria-hidden /> Unarchive
             </Button>
@@ -229,7 +254,13 @@ export function RequestDetailPage() {
         </Alert>
       )}
 
-      {viewer.noApprovers && r.status === 'pending' && (
+      {liquidationMode && !inLiquidation && (
+        <Alert tone="info" className="mb-4">
+          {r.requestNo} isn't approved, so there is nothing to liquidate.
+        </Alert>
+      )}
+
+      {!liquidationMode && viewer.noApprovers && r.status === 'pending' && (
         <Alert tone="warning" className="mb-4">
           Nobody else can approve this request. Add an approver in Settings → Approvals.
         </Alert>
@@ -245,12 +276,12 @@ export function RequestDetailPage() {
         </Alert>
       )}
 
-      {settlement && <SettlementBanner s={settlement} requestorName={r.requestorName} />}
+      {liquidationMode && settlement && <SettlementBanner s={settlement} requestorName={r.requestorName} />}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <Card className="p-5">
-            <h2 className="mb-3 font-semibold">Request</h2>
+            <h2 className="mb-3 font-semibold">{liquidationMode ? 'Approved request' : 'Request'}</h2>
             <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
               <Item label="Requestor">{r.requestorName}</Item>
               <Item label="Designation">{r.requestorDesignation}</Item>
@@ -267,7 +298,7 @@ export function RequestDetailPage() {
             <AttachmentLink requestId={r.id} set="request" files={r.attachments} label="Approved request document" />
           </Card>
 
-          {r.liquidations.length > 0 && (
+          {liquidationMode && r.liquidations.length > 0 && (
             <Card className="p-5">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <h2 className="font-semibold">Liquidation</h2>
@@ -288,7 +319,7 @@ export function RequestDetailPage() {
             </Card>
           )}
 
-          {viewer.canSubmitReceipt && (
+          {liquidationMode && viewer.canSubmitReceipt && (
             <Card className="space-y-4 p-5">
               <div>
                 <h2 className="font-semibold">{r.status === 'revision_requested' ? 'Revise the liquidation' : 'Liquidate'}</h2>
@@ -317,13 +348,17 @@ export function RequestDetailPage() {
 
         <div className="space-y-6">
           <Card className="p-5">
-            <h2 className="mb-3 font-semibold">Approvals</h2>
-            <p className="mb-2 text-xs text-slate-500">{r.approvalRule === 'all_required' ? 'Every approver must approve.' : 'One approval is enough.'}</p>
-            <ApprovalList items={approvals.request} />
-            {approvals.liquidation.length > 0 && (
-              <>
-                <h3 className="mb-2 mt-4 text-sm font-medium">Latest receipt</h3>
+            <h2 className="mb-3 font-semibold">{liquidationMode ? 'Receipt approvals' : 'Approvals'}</h2>
+            {liquidationMode ? (
+              approvals.liquidation.length > 0 ? (
                 <ApprovalList items={approvals.liquidation} />
+              ) : (
+                <p className="text-sm text-slate-500">Shown once receipts are submitted.</p>
+              )
+            ) : (
+              <>
+                <p className="mb-2 text-xs text-slate-500">{r.approvalRule === 'all_required' ? 'Every approver must approve.' : 'One approval is enough.'}</p>
+                <ApprovalList items={approvals.request} />
               </>
             )}
           </Card>

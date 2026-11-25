@@ -112,7 +112,13 @@ fundRequestsRouter.get('/options', async (req, res) => {
 const listQuery = z.object({
   scope: z.enum(['mine', 'inbox', 'all', 'archived']).default('mine'),
   status: z.enum(FUND_REQUEST_STATUSES).optional(),
+  /** request: everything up to the decision; liquidation: approved requests and their receipts */
+  stage: z.enum(['request', 'liquidation']).optional(),
 });
+
+/** Where a request is shown once it's approved: the Liquidations page. */
+const LIQUIDATION_STATUSES = ['approved', 'receipt_submitted', 'revision_requested', 'settlement_due', 'cleared'] as const;
+const isLiquidationStage = (status: string) => (LIQUIDATION_STATUSES as readonly string[]).includes(status);
 
 /** For each request: is it waiting for this user's decision (on the request or its latest receipt)? */
 async function waitingFor(academicYearId: string, userId: string, perms: readonly string[], rows: RequestWithAll[]) {
@@ -141,11 +147,18 @@ async function waitingFor(academicYearId: string, userId: string, perms: readonl
 
 const awaitingDecision: Prisma.FundRequestWhereInput = { status: { in: ['pending', 'receipt_submitted', 'settlement_due'] } };
 
-/** The number on the "To approve" tab and in the menu. */
+/** The numbers on the "To approve" / "To review" tabs and in the menu. */
 fundRequestsRouter.get('/counts', async (req, res) => {
   const { db, ay, perms } = ctxOf(req);
+  const userId = req.user!.id;
   const rows = await db.fundRequest.findMany({ where: { fund: visibleFundsWhere(perms), ...awaitingDecision }, include: requestInclude });
-  res.json({ toApprove: (await waitingFor(ay.id, req.user!.id, perms, rows)).size });
+  const waiting = await waitingFor(ay.id, userId, perms, rows);
+  const liquidations = rows.filter((r) => waiting.has(r.id) && isLiquidationStage(r.status)).length;
+  // approved requests of this user that still need a liquidation (or a revised one)
+  const toLiquidate = await db.fundRequest.count({
+    where: { requestorId: userId, archivedAt: null, status: { in: ['approved', 'revision_requested'] }, fund: visibleFundsWhere(perms) },
+  });
+  res.json({ toApprove: waiting.size, requests: waiting.size - liquidations, liquidations, toLiquidate });
 });
 
 fundRequestsRouter.get('/', async (req, res) => {
@@ -156,7 +169,7 @@ fundRequestsRouter.get('/', async (req, res) => {
 
   const where: Prisma.FundRequestWhereInput = {
     fund: visibleFundsWhere(perms),
-    ...(q.status ? { status: q.status } : {}),
+    ...(q.status ? { status: q.status } : q.stage === 'liquidation' ? { status: { in: [...LIQUIDATION_STATUSES] } } : {}),
     // archived requests only appear in the Archived list: the adviser sees all of them, others their own
     archivedAt: q.scope === 'archived' ? { not: null } : null,
     ...(q.scope === 'mine' || (q.scope === 'archived' && !perms.includes('manage')) ? { requestorId: userId } : {}),
@@ -175,6 +188,7 @@ fundRequestsRouter.get('/', async (req, res) => {
     const latest = r.liquidations.at(-1);
     const needsMyAction = waiting.has(r.id);
     if (q.scope === 'inbox' && !needsMyAction) continue;
+    if (q.scope === 'inbox' && q.stage && isLiquidationStage(r.status) !== (q.stage === 'liquidation')) continue;
     items.push({
       id: r.id,
       requestNo: r.requestNo,
