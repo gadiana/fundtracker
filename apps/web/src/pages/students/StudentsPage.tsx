@@ -1,4 +1,5 @@
 import { useState, type ChangeEvent } from 'react';
+import { SectionFilter } from '../../components/SectionSelect';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileUp, GraduationCap, QrCode, Search, UserPlus } from 'lucide-react';
@@ -81,7 +82,8 @@ export function StudentsPage() {
   };
   const totalPages = Math.max(1, Math.ceil((list.data?.total ?? 0) / PAGE_SIZE));
   const setFilter = (key: keyof typeof filters) => (e: ChangeEvent<HTMLSelectElement>) => {
-    setFilters((f) => ({ ...f, [key]: e.target.value }));
+    // a section belongs to one program and year: a new program or year clears it
+    setFilters((f) => ({ ...f, [key]: e.target.value, ...(key === 'programId' || key === 'yearLevel' ? { sectionId: '' } : {}) }));
     setPage(1);
   };
 
@@ -163,14 +165,17 @@ export function StudentsPage() {
             </option>
           ))}
         </Select>
-        <Select aria-label="Section" value={filters.sectionId} onChange={setFilter('sectionId')}>
-          <option value="">All sections</option>
-          {meta.data?.sections.map((s) => (
-            <option key={s.id} value={s.id}>
-              Section {s.name}
-            </option>
-          ))}
-        </Select>
+        <SectionFilter
+          sections={meta.data?.sections ?? []}
+          programs={meta.data?.programs ?? []}
+          programId={filters.programId}
+          yearLevel={filters.yearLevel}
+          value={filters.sectionId}
+          onChange={(sectionId) => {
+            setFilters((f) => ({ ...f, sectionId }));
+            setPage(1);
+          }}
+        />
         <Select aria-label="Sort by" value={filters.sort} onChange={setFilter('sort')} className="sm:col-span-full lg:col-span-1">
           <option value="name">Name (A–Z)</option>
           <option value="name_desc">Name (Z–A)</option>

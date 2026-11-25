@@ -98,15 +98,20 @@ async function main() {
     });
   }
 
-  for (const name of SECTIONS) {
-    await prisma.section.upsert({
-      where: { academicYearId_name: { academicYearId: ay.id, name } },
-      update: {},
-      create: { academicYearId: ay.id, name },
-    });
-  }
-
   const programs = await prisma.program.findMany({ where: { academicYearId: ay.id } });
+  // every sample program gets sections A-C in each year level
+  const yearLevels = (await prisma.aySetting.findUnique({ where: { academicYearId: ay.id } }))?.yearLevelCount ?? 4;
+  for (const program of programs) {
+    for (let yearLevel = 1; yearLevel <= yearLevels; yearLevel++) {
+      for (const name of SECTIONS) {
+        await prisma.section.upsert({
+          where: { academicYearId_programId_yearLevel_name: { academicYearId: ay.id, programId: program.id, yearLevel, name } },
+          update: {},
+          create: { academicYearId: ay.id, programId: program.id, yearLevel, name },
+        });
+      }
+    }
+  }
   const sections = await prisma.section.findMany({ where: { academicYearId: ay.id } });
   let added = 0;
   for (const [studentNumber, firstName, middleName, lastName, code, yearLevel, sectionName] of STUDENTS) {
@@ -121,7 +126,7 @@ async function main() {
         ...studentNameKeys({ firstName, middleName, lastName }),
         programId: programs.find((p) => p.code === code)!.id,
         yearLevel,
-        sectionId: sections.find((x) => x.name === sectionName)?.id ?? null,
+        sectionId: sections.find((x) => x.name === sectionName && x.yearLevel === yearLevel && x.programId === programs.find((p) => p.code === code)!.id)?.id ?? null,
         source: 'manual',
         createdByName: 'Seed data',
         approvedAt: new Date(),
@@ -155,7 +160,7 @@ async function main() {
     fundsAdded++;
   }
 
-  console.info(`Seeded AY ${ay.label}${ay.isCurrent ? ' (current)' : ''}: ${BRANDING.orgName}, ${DEFAULT_DESIGNATIONS.length} positions, ${PROGRAMS.length} programs, ${SECTIONS.length} sections, ${added} new sample student(s), ${fundsAdded} new sample fund(s).`);
+  console.info(`Seeded AY ${ay.label}${ay.isCurrent ? ' (current)' : ''}: ${BRANDING.orgName}, ${DEFAULT_DESIGNATIONS.length} positions, ${PROGRAMS.length} programs, sections ${SECTIONS.join('/')} per program and year, ${added} new sample student(s), ${fundsAdded} new sample fund(s).`);
   console.info('Next: open the web app and sign up. The first account in this AY becomes the adviser.');
 }
 

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { SectionOption } from '../lib/types';
 import { useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { CheckCircle2, LinkIcon } from 'lucide-react';
@@ -13,7 +14,7 @@ interface EnrollInfo {
   label: string | null;
   yearLevelCount: number;
   programs: { id: string; code: string; name: string }[];
-  sections: { id: string; name: string }[];
+  sections: SectionOption[];
   privacyConsentText: string;
 }
 

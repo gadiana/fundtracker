@@ -134,6 +134,10 @@ export async function validatePlacement(
   }
   const maxYear = settings?.yearLevelCount ?? 4;
   if (input.yearLevel > maxYear) throw badRequest('INVALID_YEAR_LEVEL', `Year level must be from 1 to ${maxYear}.`);
+  // a section belongs to one program and year level
+  if (section && (section.programId !== input.programId || section.yearLevel !== input.yearLevel)) {
+    throw badRequest('INVALID_SECTION', `Section ${section.name} isn't one of ${program.code}'s sections for that year level. Choose the section again.`);
+  }
 }
 
 /** Any client with a studentQrToken delegate (base, scoped or inside a transaction). */

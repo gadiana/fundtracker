@@ -130,7 +130,7 @@ publicEnrollRouter.get('/:token', async (req, res) => {
   const [settings, programs, sections] = await Promise.all([
     prisma.aySetting.findUnique({ where: { academicYearId: ayId } }),
     prisma.program.findMany({ where: { academicYearId: ayId, isActive: true }, orderBy: { code: 'asc' } }),
-    prisma.section.findMany({ where: { academicYearId: ayId, isActive: true }, orderBy: { name: 'asc' } }),
+    prisma.section.findMany({ where: { academicYearId: ayId, isActive: true }, orderBy: [{ yearLevel: 'asc' }, { name: 'asc' }] }),
   ]);
   res.json({
     academicYear: link.academicYear.label,
@@ -143,7 +143,7 @@ publicEnrollRouter.get('/:token', async (req, res) => {
     label: link.label,
     yearLevelCount: settings?.yearLevelCount ?? 4,
     programs: programs.map((p) => ({ id: p.id, code: p.code, name: p.name })),
-    sections: sections.map((s) => ({ id: s.id, name: s.name })),
+    sections: sections.map((s) => ({ id: s.id, name: s.name, programId: s.programId, yearLevel: s.yearLevel })),
     privacyConsentText: settings?.privacyConsentText ?? '',
   });
 });

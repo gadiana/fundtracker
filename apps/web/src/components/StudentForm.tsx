@@ -1,4 +1,5 @@
 import type { ChangeEvent } from 'react';
+import { sectionChoices, sectionFits } from './SectionSelect';
 import { Link } from 'react-router';
 import { TriangleAlert } from 'lucide-react';
 import { ApiError } from '../lib/api';
@@ -112,8 +113,13 @@ export function StudentFields({
   errors?: Record<string, string>;
   idPrefix?: string;
 }) {
-  const set = (key: keyof StudentFormValues) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    onChange({ ...values, [key]: key === 'yearLevel' ? Number(e.target.value) : e.target.value });
+  const set = (key: keyof StudentFormValues) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const next = { ...values, [key]: key === 'yearLevel' ? Number(e.target.value) : e.target.value };
+    // a section belongs to one program and year level: choose again when either changes
+    if (!sectionFits(meta.sections, next.sectionId, next.programId, next.yearLevel)) next.sectionId = '';
+    onChange(next);
+  };
+  const sections = values.programId ? sectionChoices(meta.sections, meta.programs, values.programId, values.yearLevel) : [];
   const id = (k: string) => `${idPrefix}-${k}`;
   return (
     <div className="grid gap-4 sm:grid-cols-2">
@@ -153,11 +159,11 @@ export function StudentFields({
           </Select>
         </Field>
         <Field label="Section" htmlFor={id('section')} optional error={errors.sectionId}>
-          <Select id={id('section')} value={values.sectionId} onChange={set('sectionId')}>
-            <option value="">None</option>
-            {meta.sections.map((s) => (
+          <Select id={id('section')} value={values.sectionId} onChange={set('sectionId')} disabled={!values.programId}>
+            <option value="">{!values.programId ? 'Choose the program first' : sections.length ? 'None' : 'No sections for this year'}</option>
+            {sections.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.name}
+                {s.label}
               </option>
             ))}
           </Select>

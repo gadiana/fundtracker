@@ -1,12 +1,13 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, ImageIcon, Pencil, Plus, Trash2, Upload } from 'lucide-react';
+import { ChevronRight, Eye, EyeOff, ImageIcon, Pencil, Plus, Trash2, Upload } from 'lucide-react';
 import { LOGO_MIME_TYPES } from '@sft/shared';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { useToast } from '../../components/Toast';
 import { Alert, Badge, Button, Card, Checkbox, Field, Input, Select, Spinner, Toggle, cx } from '../../components/ui';
 import { api, describeError, uploadFile } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { yearLevelLabel } from '../../lib/format';
 import type { ApproverRow, PositionRow, Program, Section, Settings } from '../../lib/types';
 import { useReadOnly } from './form';
 
@@ -203,93 +204,148 @@ export function ProgramsManager() {
 
 // ───────────────────────────── Sections ─────────────────────────────
 
-export function SectionsManager() {
+/** Sections of each program, per year level: BSIT 1st year can have A, B, C while BSCS 3rd year has only A. */
+export function SectionsManager({ yearLevelCount }: { yearLevelCount: number }) {
   const { ay } = useAuth();
   const queryClient = useQueryClient();
+  const toast = useToast();
   const readOnly = useReadOnly();
   const [ask, dialog] = useConfirm();
   const key = ['sections', ay?.id];
   const list = useQuery({ queryKey: key, queryFn: () => api<{ items: Section[] }>('/sections') });
-  const [draft, setDraft] = useState('');
+  const programs = useQuery({ queryKey: ['programs', ay?.id], queryFn: () => api<{ items: Program[] }>('/programs') });
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<{ row: string; message: string } | null>(null);
   const refresh = () => queryClient.invalidateQueries({ queryKey: key });
 
-  const add = (e: FormEvent) => {
+  const rowKey = (programId: string, yearLevel: number) => `${programId}|${yearLevel}`;
+  const years = Array.from({ length: yearLevelCount }, (_, i) => i + 1);
+  const shown = (programs.data?.items ?? []).filter((p) => p.isActive || list.data?.items.some((s) => s.programId === p.id));
+
+  /** Adds the typed names ("A" or "A, B, C") to one program's year level. */
+  async function add(e: FormEvent, program: Program, yearLevel: number) {
     e.preventDefault();
-    ask({
-      title: `Add section ${draft.toUpperCase()}?`,
-      confirmLabel: 'Add section',
-      run: async () => {
-        await api('/sections', { method: 'POST', body: { name: draft } });
-        setDraft('');
-        await refresh();
-      },
-      done: 'Section added.',
-    });
-  };
+    const row = rowKey(program.id, yearLevel);
+    const names = (drafts[row] ?? '').split(/[,\s]+/).map((n) => n.trim()).filter(Boolean);
+    if (!names.length) return;
+    setBusy(row);
+    setError(null);
+    try {
+      for (const name of names) await api('/sections', { method: 'POST', body: { programId: program.id, yearLevel, name } });
+      setDrafts((d) => ({ ...d, [row]: '' }));
+      toast(`Added to ${program.code} ${yearLevelLabel(yearLevel)}: ${names.map((n) => n.toUpperCase()).join(', ')}.`);
+    } catch (err) {
+      setError({ row, message: describeError(err, { name: 'Section' }) });
+    } finally {
+      setBusy(null);
+      await refresh();
+    }
+  }
 
   return (
-    <ManagerCard title="Sections" description="e.g. A, B, C. Sections in use can only be deactivated.">
-      <ListState loading={list.isLoading} error={list.error} empty={list.data?.items.length === 0}>
-        <ul className="flex flex-wrap gap-2">
-          {list.data?.items.map((s) => (
-            <li key={s.id} className="flex items-center gap-1 rounded-lg border border-slate-200 py-1 pl-3 pr-1">
-              <span className={s.isActive ? 'text-sm font-medium' : 'text-sm text-slate-400 line-through'}>{s.name}</span>
-              {!readOnly && (
-                <>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() =>
-                      ask({
-                        title: `${s.isActive ? 'Deactivate' : 'Activate'} section ${s.name}?`,
-                        confirmLabel: s.isActive ? 'Deactivate' : 'Activate',
-                        run: async () => {
-                          await api(`/sections/${s.id}`, { method: 'PATCH', body: { isActive: !s.isActive } });
-                          await refresh();
-                        },
-                      })
-                    }
-                  >
-                    {s.isActive ? 'Off' : 'On'}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-label={`Delete section ${s.name}`}
-                    onClick={() =>
-                      ask({
-                        title: `Delete section ${s.name}?`,
-                        description: 'Only possible while no student is in it.',
-                        confirmLabel: 'Delete',
-                        tone: 'danger',
-                        run: async () => {
-                          await api(`/sections/${s.id}`, { method: 'DELETE' });
-                          await refresh();
-                        },
-                        done: 'Section deleted.',
-                      })
-                    }
-                  >
-                    <Trash2 className="size-4 text-red-600" />
-                  </Button>
-                </>
-              )}
-            </li>
+    <ManagerCard
+      title="Sections"
+      description="Each program has its own sections for each year level. Type one or more (e.g. A, B, C) and press Add. Sections with students can only be turned off."
+    >
+      <ListState loading={list.isLoading || programs.isLoading} error={list.error ?? programs.error} empty={shown.length === 0}>
+        <div className="space-y-5">
+          {shown.map((program) => (
+            <div key={program.id}>
+              <h3 className="text-sm font-semibold text-slate-900">
+                {program.code} <span className="font-normal text-slate-500">· {program.name}</span>
+              </h3>
+              <ul className="mt-2 divide-y divide-slate-100 rounded-lg border border-slate-200">
+                {years.map((yearLevel) => {
+                  const row = rowKey(program.id, yearLevel);
+                  const sections = list.data?.items.filter((s) => s.programId === program.id && s.yearLevel === yearLevel) ?? [];
+                  return (
+                    <li key={yearLevel} className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center">
+                      <span className="w-20 shrink-0 text-sm text-slate-600">{yearLevelLabel(yearLevel)}</span>
+                      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                        {sections.length === 0 && <span className="text-sm text-slate-400">No sections</span>}
+                        {sections.map((s) => (
+                          <SectionChip
+                            key={s.id}
+                            section={s}
+                            readOnly={readOnly}
+                            onToggle={() =>
+                              ask({
+                                title: `${s.isActive ? 'Turn off' : 'Turn on'} section ${s.name} of ${program.code} ${yearLevelLabel(yearLevel)}?`,
+                                description: s.isActive ? 'Students already in it keep it, but it can’t be chosen anymore.' : undefined,
+                                confirmLabel: s.isActive ? 'Turn off' : 'Turn on',
+                                run: async () => {
+                                  await api(`/sections/${s.id}`, { method: 'PATCH', body: { isActive: !s.isActive } });
+                                  await refresh();
+                                },
+                              })
+                            }
+                            onDelete={() =>
+                              ask({
+                                title: `Delete section ${s.name} of ${program.code} ${yearLevelLabel(yearLevel)}?`,
+                                description: 'Only possible while no student is in it.',
+                                confirmLabel: 'Delete',
+                                tone: 'danger',
+                                run: async () => {
+                                  await api(`/sections/${s.id}`, { method: 'DELETE' });
+                                  await refresh();
+                                },
+                                done: 'Section deleted.',
+                              })
+                            }
+                          />
+                        ))}
+                      </div>
+                      {!readOnly && program.isActive && (
+                        <form onSubmit={(e) => add(e, program, yearLevel)} className="flex shrink-0 items-center gap-1.5">
+                          <Input
+                            aria-label={`New sections for ${program.code} ${yearLevelLabel(yearLevel)}`}
+                            placeholder="A, B"
+                            className="h-8 w-24 text-sm"
+                            value={drafts[row] ?? ''}
+                            onChange={(e) => setDrafts((d) => ({ ...d, [row]: e.target.value }))}
+                          />
+                          <Button type="submit" size="sm" variant="secondary" loading={busy === row} disabled={!(drafts[row] ?? '').trim()}>
+                            <Plus className="size-4" aria-hidden /> Add
+                          </Button>
+                        </form>
+                      )}
+                      {error?.row === row && <p className="text-sm text-red-600 sm:basis-full">{error.message}</p>}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
           ))}
-        </ul>
+        </div>
       </ListState>
-      {!readOnly && (
-        <form onSubmit={add} className="mt-4 flex items-end gap-2">
-          <Field label="New section" htmlFor="new-section" className="w-40">
-            <Input id="new-section" placeholder="D" value={draft} onChange={(e) => setDraft(e.target.value)} />
-          </Field>
-          <Button type="submit" variant="secondary" disabled={!draft.trim()}>
-            <Plus className="size-4" aria-hidden /> Add
-          </Button>
-        </form>
-      )}
+      {shown.length === 0 && !programs.isLoading && <p className="mt-2 text-sm text-slate-500">Add a program first, then its sections.</p>}
       {dialog}
     </ManagerCard>
+  );
+}
+
+function SectionChip({ section, readOnly, onToggle, onDelete }: { section: Section; readOnly: boolean; onToggle: () => void; onDelete: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-0.5 rounded-md border border-slate-200 bg-slate-50 py-0.5 pl-2 pr-0.5">
+      <span className={section.isActive ? 'text-sm font-medium' : 'text-sm text-slate-400 line-through'}>{section.name}</span>
+      {!readOnly && (
+        <>
+          <button
+            type="button"
+            onClick={onToggle}
+            className="rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-800"
+            title={section.isActive ? 'Turn off (can no longer be chosen)' : 'Turn on again'}
+            aria-label={`${section.isActive ? 'Turn off' : 'Turn on'} section ${section.name}`}
+          >
+            {section.isActive ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+          </button>
+          <button type="button" onClick={onDelete} className="rounded p-0.5 text-red-600 hover:bg-red-50" aria-label={`Delete section ${section.name}`}>
+            <Trash2 className="size-3.5" />
+          </button>
+        </>
+      )}
+    </span>
   );
 }
 

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { AcademicYear } from '@prisma/client';
 import type { ReportDoc } from '@sft/shared';
 import { prisma } from '../src/db';
-import { createProgram, createSection } from './fixtures';
+import { createProgram, sectionFor } from './fixtures';
 import { createAy, expectStatus, oneReceipt, pngBuffer, registerAndLogin, resetDb, type Client } from './helpers';
 
 let ay: AcademicYear;
@@ -37,7 +37,6 @@ beforeEach(async () => {
   await prisma.aySetting.update({ where: { academicYearId: ay.id }, data: { reportPreparedByName: 'Carla Treasurer', reportPreparedByTitle: 'Treasurer', reportNotedByName: 'Maria Santos', reportPaperSize: 'LETTER' } });
   const bsit = await createProgram(ay.id, 'BSIT');
   const bscs = await createProgram(ay.id, 'BSCS');
-  const sectionA = await createSection(ay.id, 'A');
   adviser = await registerAndLogin('adviser@test.ph', undefined, ['Maria', 'Santos']);
   collector = await approve('collector@test.ph', created.designations.collector.id, ['Carlo', 'Reyes']);
   president = await approve('president@test.ph', created.designations.president.id, ['Paolo', 'Lim']);
@@ -52,7 +51,7 @@ beforeEach(async () => {
     ['1002', 'Ben', 'Abad', bsit.id, 2],
     ['2001', 'Cara', 'Bello', bscs.id, 1],
   ] as const) {
-    students[number] = expectStatus(await collector.post('/students', { studentNumber: number, firstName: first, lastName: last, programId, yearLevel, sectionId: sectionA.id }), 201).body.id;
+    students[number] = expectStatus(await collector.post('/students', { studentNumber: number, firstName: first, lastName: last, programId, yearLevel, sectionId: (await sectionFor(ay.id, programId, yearLevel)).id }), 201).body.id;
   }
   // Ana pays everything, Ben pays part of Student Fee, Cara's payment is voided
   await pay(collector, '1001', 65_000);

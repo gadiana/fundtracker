@@ -221,11 +221,17 @@ export interface Program {
   isActive: boolean;
 }
 
+/** A section of one program's year level (BSIT 1st year → A). */
 export interface Section {
   id: string;
   name: string;
+  programId: string;
+  yearLevel: number;
   isActive: boolean;
 }
+
+/** A section as the student forms and filters see it. */
+export type SectionOption = Pick<Section, 'id' | 'name' | 'programId' | 'yearLevel'>;
 
 export interface PositionRow extends Designation {
   sortOrder: number;
@@ -346,7 +352,7 @@ export interface StudentProfile {
 
 export interface StudentMeta {
   programs: { id: string; code: string; name: string }[];
-  sections: { id: string; name: string }[];
+  sections: SectionOption[];
   yearLevelCount: number;
   canOverrideDuplicates: boolean;
 }

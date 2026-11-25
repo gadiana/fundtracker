@@ -65,6 +65,8 @@ programsRouter.delete('/:id', ...adviserWrite, async (req, res) => {
     db.fundProgram.count({ where: { programId: program.id } }),
   ]);
   if (students || funds) throw conflict('IN_USE', `${program.code} is already used by students or funds. Deactivate it instead.`);
+  // its sections have no students either (checked above), so they go with it
+  await db.section.deleteMany({ where: { programId: program.id } });
   await db.program.delete({ where: { id: program.id } });
   await audit(req, 'delete', 'program', program.id, program);
   res.status(204).end();
@@ -75,42 +77,66 @@ programsRouter.delete('/:id', ...adviserWrite, async (req, res) => {
 export const sectionsRouter = Router();
 sectionsRouter.use(...memberGate);
 
+/** What the log keeps of a section: readable, without ids. */
+const sectionSnapshot = (s: { name: string; yearLevel: number; isActive: boolean; program: { code: string } }) => ({
+  name: s.name,
+  program: s.program.code,
+  yearLevel: s.yearLevel,
+  isActive: s.isActive,
+});
+const ORDINAL = ['', '1st', '2nd', '3rd'];
+const yearName = (n: number) => `${ORDINAL[n] ?? `${n}th`} year`;
+
 sectionsRouter.get('/', async (req, res) => {
-  const items = await ctxOf(req).db.section.findMany({ orderBy: { name: 'asc' } });
+  const items = await ctxOf(req).db.section.findMany({ orderBy: [{ yearLevel: 'asc' }, { name: 'asc' }] });
   res.json({ items });
 });
 
 sectionsRouter.post('/', ...adviserWrite, async (req, res) => {
   const body = sectionSchema.parse(req.body);
   const { db, ay } = ctxOf(req);
-  if (await db.section.findFirst({ where: { name: body.name } })) throw conflict('DUPLICATE', `Section ${body.name} already exists.`);
-  const section = await db.section.create({ data: { ...body, academicYearId: ay.id } });
-  await audit(req, 'create', 'section', section.id, undefined, section);
-  res.status(201).json(section);
+  const [program, settings] = await Promise.all([
+    db.program.findFirst({ where: { id: body.programId } }),
+    db.aySetting.findUnique({ where: { academicYearId: ay.id } }),
+  ]);
+  if (!program) throw badRequest('INVALID_PROGRAM', 'Choose a program of this academic year.');
+  if (body.yearLevel > (settings?.yearLevelCount ?? 4)) throw badRequest('INVALID_YEAR_LEVEL', `This academic year has ${settings?.yearLevelCount ?? 4} year levels.`);
+  if (await db.section.findFirst({ where: { programId: program.id, yearLevel: body.yearLevel, name: body.name } })) {
+    throw conflict('DUPLICATE', `${program.code} ${yearName(body.yearLevel)} already has section ${body.name}.`);
+  }
+  const section = await db.section.create({ data: { ...body, academicYearId: ay.id }, include: { program: true } });
+  await audit(req, 'create', 'section', section.id, undefined, sectionSnapshot(section));
+  const { program: _p, ...plain } = section;
+  res.status(201).json(plain);
 });
 
 sectionsRouter.patch('/:id', ...adviserWrite, async (req, res) => {
   const body = sectionPatchSchema.parse(req.body);
   const { db } = ctxOf(req);
-  const before = await db.section.findUnique({ where: { id: uuidParam(req.params.id) } });
+  const before = await db.section.findUnique({ where: { id: uuidParam(req.params.id) }, include: { program: true } });
   if (!before) throw notFound('Section not found.');
-  if (body.name && body.name !== before.name && (await db.section.findFirst({ where: { name: body.name } }))) {
-    throw conflict('DUPLICATE', `Section ${body.name} already exists.`);
+  if (
+    body.name &&
+    body.name !== before.name &&
+    (await db.section.findFirst({ where: { programId: before.programId, yearLevel: before.yearLevel, name: body.name } }))
+  ) {
+    throw conflict('DUPLICATE', `${before.program.code} ${yearName(before.yearLevel)} already has section ${body.name}.`);
   }
-  const section = await db.section.update({ where: { id: before.id }, data: body });
-  await audit(req, 'update', 'section', section.id, before, section);
-  res.json(section);
+  const section = await db.section.update({ where: { id: before.id }, data: body, include: { program: true } });
+  await audit(req, 'update', 'section', section.id, sectionSnapshot(before), sectionSnapshot(section));
+  const { program: _p, ...plain } = section;
+  res.json(plain);
 });
 
 sectionsRouter.delete('/:id', ...adviserWrite, async (req, res) => {
   const { db } = ctxOf(req);
-  const section = await db.section.findUnique({ where: { id: uuidParam(req.params.id) } });
+  const section = await db.section.findUnique({ where: { id: uuidParam(req.params.id) }, include: { program: true } });
   if (!section) throw notFound('Section not found.');
   if (await db.student.count({ where: { sectionId: section.id } })) {
     throw conflict('IN_USE', `Section ${section.name} already has students. Deactivate it instead.`);
   }
   await db.section.delete({ where: { id: section.id } });
-  await audit(req, 'delete', 'section', section.id, section);
+  await audit(req, 'delete', 'section', section.id, sectionSnapshot(section));
   res.status(204).end();
 });
 

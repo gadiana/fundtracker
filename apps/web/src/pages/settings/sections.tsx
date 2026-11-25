@@ -51,7 +51,7 @@ export function StructureSection({ settings }: Props) {
         )}
       </SettingsCard>
       <ProgramsManager />
-      <SectionsManager />
+      <SectionsManager yearLevelCount={settings.yearLevelCount} />
     </>
   );
 }
@@ -157,7 +157,7 @@ export function ReceiptsSection({ settings }: Props) {
             <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
               <p className="font-medium text-slate-800">Transaction number</p>
               <p className="mt-1">
-                Format <code className="rounded bg-white px-1 ring-1 ring-slate-200">YYYY-MM-DD-####</code>, e.g. 2026-11-12-0011. The #### counter runs
+                Format <code className="rounded bg-surface px-1 ring-1 ring-slate-200">YYYY-MM-DD-####</code>, e.g. 2026-11-12-0011. The #### counter runs
                 for the whole academic year and never resets daily.
               </p>
             </div>

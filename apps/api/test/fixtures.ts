@@ -9,8 +9,18 @@ export async function createProgram(academicYearId: string, code: string) {
   return prisma.program.create({ data: { academicYearId, code, name: `${code} program` } });
 }
 
-export async function createSection(academicYearId: string, name: string) {
-  return prisma.section.create({ data: { academicYearId, name } });
+/** A section of one program's year level. */
+export async function createSection(academicYearId: string, name: string, programId: string, yearLevel: number) {
+  return prisma.section.create({ data: { academicYearId, name, programId, yearLevel } });
+}
+
+/** The section (made if needed) for a program and year level; "A" unless named. */
+export async function sectionFor(academicYearId: string, programId: string, yearLevel: number, name = 'A') {
+  return prisma.section.upsert({
+    where: { academicYearId_programId_yearLevel_name: { academicYearId, programId, yearLevel, name } },
+    update: {},
+    create: { academicYearId, programId, yearLevel, name },
+  });
 }
 
 export async function createFund(

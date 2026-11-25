@@ -14,16 +14,22 @@ export const programSchema = z.object({
 });
 export const programPatchSchema = programSchema.partial().extend({ isActive: z.boolean().optional() }).strict();
 
+const sectionName = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .min(1, 'Required')
+  .max(20, 'At most 20 characters')
+  .regex(/^[A-Z0-9 -]+$/, 'Letters, numbers, spaces and dashes only');
+
+/** A section of one program's year level (BSIT 1st year → A). */
 export const sectionSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .toUpperCase()
-    .min(1, 'Required')
-    .max(20, 'At most 20 characters')
-    .regex(/^[A-Z0-9 -]+$/, 'Letters, numbers, spaces and dashes only'),
+  programId: z.string().uuid('Choose a program'),
+  yearLevel: z.number().int().min(1, 'Choose a year level').max(10),
+  name: sectionName,
 });
-export const sectionPatchSchema = sectionSchema.partial().extend({ isActive: z.boolean().optional() }).strict();
+/** Only the name and whether it's active can change; its program and year stay. */
+export const sectionPatchSchema = z.object({ name: sectionName.optional(), isActive: z.boolean().optional() }).strict();
 
 const maxMembers = z.number().int('Use a whole number').min(1, 'At least 1').max(100, 'At most 100').nullable();
 

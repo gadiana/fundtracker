@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { SectionFilter } from '../../components/SectionSelect';
 import { useQuery } from '@tanstack/react-query';
 import { ExternalLink, FileBarChart, Search } from 'lucide-react';
 import { FUND_REQUEST_STATUSES, FUND_REQUEST_STATUS_LABELS, REPORT_TITLES, type ReportKind } from '@sft/shared';
@@ -46,7 +47,7 @@ function Dates({ v, set }: { v: Record<string, string>; set: (k: string, x: stri
 function Placement({ o, v, set }: { o: HistoryOptions; v: Record<string, string>; set: (k: string, x: string) => void }) {
   return (
     <div className="grid grid-cols-3 gap-2">
-      <Select aria-label="Program" value={v.programId ?? ''} onChange={(e) => set('programId', e.target.value)}>
+      <Select aria-label="Program" value={v.programId ?? ''} onChange={(e) => { set('programId', e.target.value); set('sectionId', ''); }}>
         <option value="">All programs</option>
         {o.programs.map((p) => (
           <option key={p.id} value={p.id}>
@@ -54,7 +55,7 @@ function Placement({ o, v, set }: { o: HistoryOptions; v: Record<string, string>
           </option>
         ))}
       </Select>
-      <Select aria-label="Year level" value={v.yearLevel ?? ''} onChange={(e) => set('yearLevel', e.target.value)}>
+      <Select aria-label="Year level" value={v.yearLevel ?? ''} onChange={(e) => { set('yearLevel', e.target.value); set('sectionId', ''); }}>
         <option value="">All years</option>
         {Array.from({ length: o.yearLevelCount }, (_, i) => i + 1).map((n) => (
           <option key={n} value={n}>
@@ -62,14 +63,7 @@ function Placement({ o, v, set }: { o: HistoryOptions; v: Record<string, string>
           </option>
         ))}
       </Select>
-      <Select aria-label="Section" value={v.sectionId ?? ''} onChange={(e) => set('sectionId', e.target.value)}>
-        <option value="">All sections</option>
-        {o.sections.map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.name}
-          </option>
-        ))}
-      </Select>
+      <SectionFilter sections={o.sections} programs={o.programs} programId={v.programId} yearLevel={v.yearLevel} value={v.sectionId ?? ''} onChange={(x) => set('sectionId', x)} />
     </div>
   );
 }
