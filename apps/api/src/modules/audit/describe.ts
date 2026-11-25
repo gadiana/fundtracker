@@ -135,6 +135,7 @@ function changes(before: Data, after: Data) {
 // ───────────── report formats (Settings → Reports) ─────────────
 
 const PAPER: Record<string, string> = { A4: 'A4', LETTER: 'Letter', LEGAL: 'Legal' };
+const PLACE: Record<string, string> = { beside: 'beside the text', edges: 'at the page edges' };
 const ALIGN: Record<string, string> = { left: 'left', center: 'centered', right: 'right' };
 const list = (v: unknown): Data[] => (Array.isArray(v) ? v.filter((x): x is Data => Boolean(x) && typeof x === 'object') : []);
 const quote = (v: unknown) => `"${String(v ?? '')}"`;
@@ -246,6 +247,11 @@ function reportFormatChanges(before: unknown, after: unknown): string[] {
       ...logoChanges('left', prev.logosLeft, next.logosLeft),
       ...logoChanges('right', prev.logosRight, next.logosRight),
       ...(prev.logoSize !== next.logoSize ? [`logo size ${String(prev.logoSize)} pt → ${String(next.logoSize)} pt`] : []),
+      // formats saved before these existed had the logos at the edges, 12 pt from the text
+      ...((prev.logoPlacement ?? 'edges') !== (next.logoPlacement ?? 'edges')
+        ? [`logos ${PLACE[String(prev.logoPlacement ?? 'edges')]} → ${PLACE[String(next.logoPlacement ?? 'edges')]}`]
+        : []),
+      ...((prev.logoGap ?? 12) !== (next.logoGap ?? 12) ? [`space between logos and text ${String(prev.logoGap ?? 12)} pt → ${String(next.logoGap ?? 12)} pt`] : []),
       ...headerChanges(prev.headerLines, next.headerLines),
       ...signatoryChanges(prev.signatories, next.signatories),
     ];

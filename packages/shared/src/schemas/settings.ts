@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { HEADER_ALIGNMENTS, REPORT_KINDS } from '../reports';
+import { HEADER_ALIGNMENTS, LOGO_PLACEMENTS, REPORT_KINDS } from '../reports';
 
 /** Always shown on the public QR page: the student's name and Cleared / Has Balance. */
 export const PUBLIC_FIELDS_ALWAYS = ['name', 'status'] as const;
@@ -137,6 +137,9 @@ export const reportFormatSchema = z.object({
   logosLeft: z.array(reportLogoSchema).max(4, 'At most 4 logos on a side'),
   logosRight: z.array(reportLogoSchema).max(4, 'At most 4 logos on a side'),
   logoSize: z.number().int().min(24).max(120),
+  /** formats saved before these existed keep the old look: logos at the page edges */
+  logoPlacement: z.enum(LOGO_PLACEMENTS).default('edges'),
+  logoGap: z.number().int().min(0, 'At least 0 pt').max(144, 'At most 144 pt').default(12),
   headerLines: z.array(reportHeaderLineSchema).max(10, 'At most 10 header lines'),
   signatories: z.array(reportSignatorySchema).max(8, 'At most 8 signatories'),
 });

@@ -40,7 +40,8 @@ type Pdf = InstanceType<(typeof import('jspdf'))['jsPDF']>;
 
 /**
  * The letterhead, as on the printed page: logos at each side (the first closest to the text),
- * the header lines between them. Returns the y below it.
+ * the header lines between them, the logos next to the text (beside) or at the margins (edges).
+ * Returns the y below it.
  */
 async function drawHeader(pdf: Pdf, h: ReportHeader, M: number, y: number) {
   const W = pdf.internal.pageSize.getWidth();
@@ -48,14 +49,24 @@ async function drawHeader(pdf: Pdf, h: ReportHeader, M: number, y: number) {
   if (!side && !h.lines.length) return y;
   const size = h.logoSize;
   const gap = 6;
-  const sideW = side ? side * size + (side - 1) * gap + 12 : 0;
-  const textLeft = M + sideW;
-  const textRight = W - M - sideW;
+  const space = side ? h.logoGap : 0;
+  const sideW = side ? side * size + (side - 1) * gap : 0;
+  const room = W - 2 * M - 2 * (sideW + space);
+  const font = (l: ReportHeader['lines'][number]) => pdf.setFont('helvetica', l.bold ? 'bold' : 'normal').setFontSize(l.size);
+  const widest = (l: ReportHeader['lines'][number]) => {
+    font(l);
+    // a point to spare, or splitting may wrap a line that exactly fits
+    return Math.max(...l.text.split('\n').map((t) => pdf.getTextWidth(t))) + 1;
+  };
+  // beside: the text is as wide as its longest line, so the logos sit right next to it
+  const textW = h.logoPlacement === 'beside' ? Math.min(room, Math.max(0, ...h.lines.map(widest))) : room;
+  const textLeft = (W - textW) / 2;
+  const textRight = textLeft + textW;
 
   // the text block, measured first so it can sit in the middle of the logos
   const blocks = h.lines.map((l) => {
-    pdf.setFont('helvetica', l.bold ? 'bold' : 'normal').setFontSize(l.size);
-    const lines: string[] = pdf.splitTextToSize(l.text, textRight - textLeft);
+    font(l);
+    const lines: string[] = pdf.splitTextToSize(l.text, textW);
     return { l, lines, height: lines.length * l.size * 1.2 };
   });
   const textH = blocks.reduce((s, b) => s + b.height, 0);
@@ -69,8 +80,17 @@ async function drawHeader(pdf: Pdf, h: ReportHeader, M: number, y: number) {
     const ih = img.height * scale;
     pdf.addImage(img.data, 'JPEG', x + (size - w) / 2, y + (headerH - ih) / 2, w, ih, undefined, 'FAST');
   };
-  for (const [i, url] of h.logosLeft.entries()) await place(url, textLeft - 12 - (i + 1) * size - i * gap);
-  for (const [i, url] of h.logosRight.entries()) await place(url, textRight + 12 + i * (size + gap));
+  const step = size + gap;
+  if (h.logoPlacement === 'beside') {
+    for (const [i, url] of h.logosLeft.entries()) await place(url, textLeft - space - size - i * step);
+    for (const [i, url] of h.logosRight.entries()) await place(url, textRight + space + i * step);
+  } else {
+    // packed against the margins, the 1st still the one nearest the text
+    const nL = h.logosLeft.length;
+    const nR = h.logosRight.length;
+    for (const [i, url] of h.logosLeft.entries()) await place(url, M + (nL - 1 - i) * step);
+    for (const [i, url] of h.logosRight.entries()) await place(url, W - M - nR * size - (nR - 1) * gap + i * step);
+  }
 
   let ty = y + (headerH - textH) / 2;
   pdf.setTextColor(0);
