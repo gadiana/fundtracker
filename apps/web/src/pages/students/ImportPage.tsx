@@ -162,7 +162,7 @@ export function ImportPage() {
                   key={v}
                   type="button"
                   onClick={() => setShow(v)}
-                  className={cx('rounded-md px-2.5 py-1 text-xs font-medium', show === v ? 'bg-white shadow-sm' : 'text-slate-600')}
+                  className={cx('rounded-md px-2.5 py-1 text-xs font-medium', show === v ? 'bg-surface shadow-sm' : 'text-slate-600')}
                 >
                   {v === 'all' ? 'All rows' : 'Only problems'}
                 </button>

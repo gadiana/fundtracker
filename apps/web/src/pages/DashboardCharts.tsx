@@ -4,7 +4,8 @@ import { Card, cx } from '../components/ui';
 import { formatMoney } from '../lib/format';
 import type { DashboardData } from './Dashboard';
 
-const COLORS = { collected: '#4f46e5', outstanding: '#f59e0b', used: '#e11d48', grid: '#e2e8f0', axis: '#64748b' };
+// theme colors, so the charts follow the accent color and dark mode
+const COLORS = { collected: 'var(--color-brand-600)', outstanding: 'var(--color-amber-500)', used: 'var(--color-rose-600)', grid: 'var(--color-slate-200)', axis: 'var(--color-slate-500)' };
 
 /** ₱1.2k, ₱35k, ₱1.4M: short enough for an axis. */
 const compactPeso = (centavos: number) =>
@@ -104,7 +105,7 @@ export default function DashboardCharts({ data }: { data: DashboardData }) {
                 role="tab"
                 aria-selected={by === k}
                 onClick={() => setBy(k)}
-                className={cx('rounded-md px-2 py-1 font-medium', by === k ? 'bg-white shadow-sm' : 'text-slate-600')}
+                className={cx('rounded-md px-2 py-1 font-medium', by === k ? 'bg-surface shadow-sm' : 'text-slate-600')}
               >
                 {label}
               </button>

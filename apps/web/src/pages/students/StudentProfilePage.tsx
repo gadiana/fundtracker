@@ -128,7 +128,7 @@ export function StudentProfilePage() {
               href={`/print/report/student-statement?studentId=${s.id}`}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium hover:bg-slate-50"
+              className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-surface px-4 text-sm font-medium hover:bg-slate-50"
             >
               <Printer className="size-4" aria-hidden /> Statement
             </a>

@@ -64,7 +64,7 @@ export function ProfilePage() {
       <PageHeader title="Profile" />
 
       <Card className="mb-6 flex flex-col gap-5 p-5 sm:flex-row sm:items-center">
-        <Avatar name={user.name} url={user.avatarUrl} size="xl" className="ring-4 ring-white" />
+        <Avatar name={user.name} url={user.avatarUrl} size="xl" className="ring-4 ring-surface" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-xl font-semibold tracking-tight">{user.name}</p>
           <p className="truncate text-sm text-slate-500">{user.email}</p>

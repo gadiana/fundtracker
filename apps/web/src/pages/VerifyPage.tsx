@@ -39,7 +39,7 @@ export function VerifyPage() {
             <Spinner />
           </div>
         ) : result.error || !r ? (
-          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="rounded-2xl border border-slate-200 bg-surface shadow-sm">
             <EmptyState icon={QrCode} title="QR code not recognized" body={describeError(result.error)} />
           </div>
         ) : (
@@ -103,7 +103,7 @@ function YearDetails({ year: y, showHeading, onOpenReceipt }: { year: VerifyYear
   const hasExtras = Boolean(y.breakdown?.length || y.transactions);
   if (!showHeading && !hasExtras) return null;
   return (
-    <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="mt-4 rounded-2xl border border-slate-200 bg-surface p-4 shadow-sm">
       {showHeading && (
         <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="font-semibold">

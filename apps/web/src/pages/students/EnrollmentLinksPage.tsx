@@ -161,14 +161,14 @@ function LinkCard({ link, readOnly, onRevoke, onCopied }: { link: EnrollmentLink
             >
               <Copy className="size-4" aria-hidden /> Copy link
             </Button>
-            <a href={url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium hover:bg-slate-50">
+            <a href={url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 bg-surface px-3 text-sm font-medium hover:bg-slate-50">
               <ExternalLink className="size-4" aria-hidden /> Open
             </a>
             {png && (
               <a
                 href={png}
                 download={`enrollment-qr${link.label ? `-${link.label.replace(/[^\w-]+/g, '-')}` : ''}.png`}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium hover:bg-slate-50"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 bg-surface px-3 text-sm font-medium hover:bg-slate-50"
               >
                 <Download className="size-4" aria-hidden /> QR image
               </a>

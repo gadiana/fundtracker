@@ -14,7 +14,7 @@ type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
 
 const buttonVariants: Record<ButtonVariant, string> = {
   primary: 'bg-brand-600 text-white hover:bg-brand-700 disabled:bg-brand-600/60 focus-visible:outline-brand-600',
-  secondary: 'bg-white text-slate-800 border border-slate-300 hover:bg-slate-50 disabled:text-slate-400 focus-visible:outline-brand-600',
+  secondary: 'bg-surface text-slate-800 border border-slate-300 hover:bg-slate-50 disabled:text-slate-400 focus-visible:outline-brand-600',
   danger: 'bg-red-600 text-white hover:bg-red-700 disabled:bg-red-600/60 focus-visible:outline-red-600',
   ghost: 'text-slate-700 hover:bg-slate-100 disabled:text-slate-400 focus-visible:outline-brand-600',
 };
@@ -65,7 +65,7 @@ export function FullPageSpinner() {
 }
 
 const controlBase =
-  'block w-full rounded-lg border bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 ' +
+  'block w-full rounded-lg border bg-surface px-3 text-sm text-slate-900 placeholder:text-slate-400 ' +
   'focus:outline-none focus:ring-2 focus:ring-brand-500/40 disabled:bg-slate-100 disabled:text-slate-500';
 const controlBorder = (invalid?: boolean) => (invalid ? 'border-red-400 focus:border-red-500' : 'border-slate-300 focus:border-brand-500');
 
@@ -124,7 +124,7 @@ export function Field({
 }
 
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cx('rounded-xl border border-slate-200 bg-white shadow-sm', className)}>{children}</div>;
+  return <div className={cx('rounded-xl border border-slate-200 bg-surface shadow-sm', className)}>{children}</div>;
 }
 
 type Tone = 'gray' | 'green' | 'red' | 'amber' | 'blue' | 'brand';
@@ -228,7 +228,7 @@ export function Toggle({
           checked ? 'bg-brand-600' : 'bg-slate-300', 
         )}
       >
-        <span className={cx('inline-block size-5 rounded-full bg-white shadow transition-transform', checked ? 'translate-x-5.5' : 'translate-x-0.5')} />
+        <span className={cx('inline-block size-5 rounded-full bg-surface shadow transition-transform', checked ? 'translate-x-5.5' : 'translate-x-0.5')} />
       </button>
     </div>
   );

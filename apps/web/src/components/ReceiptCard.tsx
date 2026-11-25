@@ -13,13 +13,13 @@ function receiptDateTime(r: Receipt) {
 export const ReceiptCard = forwardRef<HTMLDivElement, { receipt: Receipt }>(function ReceiptCard({ receipt: r }, ref) {
   const voided = r.status === 'voided';
   return (
-    <div ref={ref} className="relative mx-auto w-full max-w-sm overflow-hidden rounded-2xl bg-white text-slate-900 shadow-lg ring-1 ring-slate-200">
+    <div ref={ref} className="force-light relative mx-auto w-full max-w-sm overflow-hidden rounded-2xl bg-surface text-slate-900 shadow-lg ring-1 ring-slate-200">
       <div className="bg-brand-600 px-5 pb-10 pt-5 text-white">
         <div className="flex items-center gap-3">
           {r.org.logoUrl ? (
-            <img src={r.org.logoUrl} alt="" className="size-10 rounded-lg bg-white object-contain p-0.5" />
+            <img src={r.org.logoUrl} alt="" className="size-10 rounded-lg bg-surface object-contain p-0.5" />
           ) : (
-            <div className="grid size-10 place-items-center rounded-lg bg-white/20 font-bold">{(r.org.abbr || r.org.name || 'F').slice(0, 1)}</div>
+            <div className="grid size-10 place-items-center rounded-lg bg-surface/20 font-bold">{(r.org.abbr || r.org.name || 'F').slice(0, 1)}</div>
           )}
           <div className="min-w-0 leading-tight">
             <p className="truncate font-semibold">{r.org.name || 'Fund Tracker'}</p>
@@ -29,7 +29,7 @@ export const ReceiptCard = forwardRef<HTMLDivElement, { receipt: Receipt }>(func
       </div>
 
       <div className="-mt-6 px-5">
-        <div className="rounded-xl bg-white p-4 text-center shadow-sm ring-1 ring-slate-100">
+        <div className="rounded-xl bg-surface p-4 text-center shadow-sm ring-1 ring-slate-100">
           <p className="flex items-center justify-center gap-1.5 text-sm font-medium text-emerald-700">
             <CheckCircle2 className="size-4" aria-hidden /> Payment received
           </p>

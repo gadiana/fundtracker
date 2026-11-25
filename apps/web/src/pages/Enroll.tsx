@@ -52,7 +52,7 @@ export function EnrollPage() {
             <Spinner />
           </div>
         ) : info.error ? (
-          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="rounded-2xl border border-slate-200 bg-surface shadow-sm">
             <EmptyState icon={LinkIcon} title="This enrollment link can’t be used" body={describeError(info.error)} />
           </div>
         ) : info.data ? (
@@ -71,7 +71,7 @@ export function EnrollPage() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <div className="rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm sm:p-6">
               {done ? (
                 <div className="space-y-3 py-4 text-center">
                   <CheckCircle2 className="mx-auto size-12 text-emerald-600" aria-hidden />
