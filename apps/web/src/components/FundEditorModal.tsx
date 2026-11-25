@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Lock } from 'lucide-react';
+import { Lock, Plus } from 'lucide-react';
 import { api, ApiError, describeError } from '../lib/api';
 import { formatMoney, yearLevelLabel } from '../lib/format';
 import type { ChargeSync, Fund, StudentMeta } from '../lib/types';
@@ -34,11 +34,14 @@ export function FundEditorModal({
   fund,
   onClose,
   onSaved,
+  onAddAnother,
 }: {
   meta: StudentMeta;
   fund?: Fund;
   onClose: () => void;
   onSaved: (fund: Fund, charges: ChargeSync) => void;
+  /** when the amount is locked: opens a new fund for collecting more */
+  onAddAnother?: () => void;
 }) {
   const [values, setValues] = useState<Values>(() =>
     fund
@@ -153,6 +156,14 @@ export function FundEditorModal({
               <span className="inline-flex items-center gap-1.5">
                 <Lock className="size-3.5" aria-hidden /> Collection has started, so the amount ({formatMoney(fund.amountPerStudent)}) can no longer change.
               </span>
+              {onAddAnother && (
+                <span className="mt-2 flex flex-wrap items-center gap-2">
+                  To collect more from these students, add another fund.
+                  <Button size="sm" variant="secondary" onClick={onAddAnother}>
+                    <Plus className="size-4" aria-hidden /> Add another fund
+                  </Button>
+                </span>
+              )}
             </Alert>
           )}
 
