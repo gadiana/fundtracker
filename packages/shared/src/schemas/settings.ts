@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { HEADER_ALIGNMENTS, REPORT_KINDS } from '../reports';
 
 /** Always shown on the public QR page: the student's name and Cleared / Has Balance. */
 export const PUBLIC_FIELDS_ALWAYS = ['name', 'status'] as const;
@@ -77,6 +78,7 @@ export const settingsPatchSchema = z
     reportNotedByName: nullableText(150),
     reportNotedByTitle: nullableText(150),
     reportPaperSize: z.enum(PAPER_SIZES),
+    reportFormats: z.lazy(() => reportFormatsSchema),
     // Email sender (SMTP credentials stay in the server's env)
     emailSenderName: nullableText(150),
     emailSenderAddress: optionalEmail,
@@ -106,6 +108,45 @@ export const settingsPatchSchema = z
   .strict();
 
 export type SettingsPatch = z.input<typeof settingsPatchSchema>;
+
+// ───────────────────────────── report formats ─────────────────────────────
+
+/** A logo in a report header: the organization's logo, or an uploaded image (its file id). */
+export const reportLogoSchema = z.union([z.literal('org'), z.string().uuid()]);
+
+export const reportHeaderLineSchema = z.object({
+  text: text(200),
+  bold: z.boolean(),
+  size: z.number().int().min(8, 'At least 8 pt').max(32, 'At most 32 pt'),
+  align: z.enum(HEADER_ALIGNMENTS),
+});
+
+export const reportSignatorySchema = z.object({
+  /** what the person signs as, e.g. "Noted by" */
+  label: text(60),
+  /** blank: whoever generates the report */
+  name: text(150),
+  position: text(150),
+  /** printed on the report */
+  show: z.boolean(),
+});
+
+/** How one kind of report is printed: paper, letterhead and who signs it. */
+export const reportFormatSchema = z.object({
+  paperSize: z.enum(PAPER_SIZES),
+  logosLeft: z.array(reportLogoSchema).max(4, 'At most 4 logos on a side'),
+  logosRight: z.array(reportLogoSchema).max(4, 'At most 4 logos on a side'),
+  logoSize: z.number().int().min(24).max(120),
+  headerLines: z.array(reportHeaderLineSchema).max(10, 'At most 10 header lines'),
+  signatories: z.array(reportSignatorySchema).max(8, 'At most 8 signatories'),
+});
+export type ReportFormat = z.infer<typeof reportFormatSchema>;
+export type ReportLogo = z.infer<typeof reportLogoSchema>;
+export type ReportSignatory = z.infer<typeof reportSignatorySchema>;
+
+/** Every report's format, by report kind (a kind left out keeps its default). */
+export const reportFormatsSchema = z.partialRecord(z.enum(REPORT_KINDS), reportFormatSchema);
+export type ReportFormats = z.infer<typeof reportFormatsSchema>;
 
 /** The organization's name fields: set in the code (apps/api/src/branding.ts), not in the app. */
 export const BRANDING_KEYS = ['schoolName', 'schoolAbbr', 'collegeName', 'collegeAbbr', 'orgName', 'orgAbbr', 'programName', 'programAbbr'] as const;

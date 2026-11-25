@@ -22,6 +22,7 @@ import { formatDateTime } from '../../lib/format';
 import type { Settings } from '../../lib/types';
 import { ReadOnlyContext } from './form';
 import { EmailNotificationsSection } from './notifications';
+import { ReportsSection } from './reportFormats';
 import {
   ApprovalsSection,
   CollectionSection,
@@ -32,7 +33,6 @@ import {
   PrivacySection,
   PublicPageSection,
   ReceiptsSection,
-  ReportsSection,
   SecuritySection,
   StructureSection,
 } from './sections';

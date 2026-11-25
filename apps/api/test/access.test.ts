@@ -60,6 +60,7 @@ const PUBLIC = [
   'post /api/auth/logout',
   'get /api/public/info',
   'get /api/public/ays/:ayId/logo',
+  'get /api/public/ays/:ayId/report-logo/:fileId',
   'get /api/public/verify/:token',
   'get /api/public/verify/:token/receipts/:paymentId',
   'get /api/public/enroll/:token',

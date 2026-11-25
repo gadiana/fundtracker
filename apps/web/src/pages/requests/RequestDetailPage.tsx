@@ -319,6 +319,13 @@ export function RequestDetailPage({ mode = 'request' }: { mode?: 'request' | 'li
             </Card>
           )}
 
+          {liquidationMode && inLiquidation && r.liquidations.length === 0 && !viewer.canSubmitReceipt && (
+            <Card className="p-5">
+              <h2 className="font-semibold">Liquidation</h2>
+              <p className="mt-1 text-sm text-slate-500">No receipts yet. {r.requestorName} submits them here once the money is used.</p>
+            </Card>
+          )}
+
           {liquidationMode && viewer.canSubmitReceipt && (
             <Card className="space-y-4 p-5">
               <div>

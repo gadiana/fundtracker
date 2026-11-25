@@ -43,7 +43,7 @@ export interface ReportDoc {
   tables: ReportTable[];
   /** shown under the summary, e.g. that restricted funds are left out */
   notes: string[];
-  header: { orgName: string; schoolName: string; collegeName: string; logoUrl: string | null; headerText: string; academicYear: string };
+  header: ReportHeader;
   signatories: { label: string; name: string; title: string }[];
   paperSize: 'A4' | 'LETTER' | 'LEGAL';
   timezone: string;
@@ -54,6 +54,32 @@ export interface ReportDoc {
   /** supporting documents printed after everything else, one group per page (e.g. receipt photos) */
   annex?: ReportAnnex;
 }
+
+/** The letterhead: logos on either side of the header text. */
+export interface ReportHeader {
+  orgName: string;
+  academicYear: string;
+  /** image URLs; the first is closest to the text */
+  logosLeft: string[];
+  logosRight: string[];
+  /** logo height in points (1/72 inch) */
+  logoSize: number;
+  lines: ReportHeaderLine[];
+}
+
+export const HEADER_ALIGNMENTS = ['left', 'center', 'right'] as const;
+export type HeaderAlignment = (typeof HEADER_ALIGNMENTS)[number];
+
+export interface ReportHeaderLine {
+  text: string;
+  bold: boolean;
+  /** font size in points */
+  size: number;
+  align: HeaderAlignment;
+}
+
+/** Header text may say {year}; it prints as the academic year, e.g. "2026-2027". */
+export const fillHeaderText = (text: string, academicYear: string) => text.replace(/\{year\}/gi, academicYear);
 
 export interface ReportAnnex {
   title: string;

@@ -101,11 +101,10 @@ describe('collection report', () => {
     ]);
     expect(table(forAdviser, 'Per day').rows).toEqual([{ day: manilaToday(), count: 2, amount: 85_000 }]);
     expect(table(forAdviser, 'Transactions').rows).toHaveLength(3);
-    expect(forAdviser.signatories).toEqual([
-      { label: 'Prepared by', name: 'Carla Treasurer', title: 'Treasurer' },
-      { label: 'Noted by', name: 'Maria Santos', title: 'Adviser' },
-    ]);
+    // no "Noted by" unless the adviser adds one to the report's format
+    expect(forAdviser.signatories).toEqual([{ label: 'Prepared by', name: 'Carla Treasurer', title: 'Treasurer' }]);
     expect(forAdviser).toMatchObject({ paperSize: 'LETTER', header: { orgName: 'Sample Student Organization', academicYear: '2026-2027' } });
+    expect(forAdviser.header.lines.map((l) => l.text)).toContain('Academic year 2026-2027');
 
     const forCollector: ReportDoc = expectStatus(await collector.get('/reports/collections'), 200).body;
     expect(table(forCollector, 'Collected per fund').rows).toEqual([
@@ -236,5 +235,65 @@ describe('dashboard', () => {
 
     const p = expectStatus(await president.get('/dashboard'), 200).body;
     expect(p.recentPayments).toEqual([]);
+  });
+});
+
+describe('report formats', () => {
+  it('prints each report with its own paper, letterhead and signatories', async () => {
+    const settings = expectStatus(await adviser.get('/settings'), 200).body;
+    // every report starts from the default: the organization centered, the preparer signing, no "Noted by"
+    expect(settings.reportFormats.collections.signatories.map((s: { label: string }) => s.label)).toEqual(['Prepared by']);
+    expect(settings.reportFormats.liquidation.signatories).toEqual([]);
+
+    const logo = expectStatus(await adviser.upload('/uploads', pngBuffer(), 'seal.png'), 201).body.id;
+    const format = {
+      ...settings.reportFormats.collections,
+      paperSize: 'LEGAL',
+      logosLeft: ['org', logo],
+      logosRight: [logo],
+      logoSize: 64,
+      headerLines: [
+        { text: 'Republic of the Philippines', bold: false, size: 10, align: 'center' },
+        { text: 'Collections for {year}', bold: true, size: 14, align: 'left' },
+        { text: '', bold: false, size: 10, align: 'center' },
+      ],
+      signatories: [
+        { label: 'Prepared by', name: '', position: '', show: true },
+        { label: 'Noted by', name: 'Maria Santos', position: 'Adviser', show: false },
+        { label: 'Audited by', name: 'Ana Cruz', position: 'Auditor', show: true },
+      ],
+    };
+    expectStatus(await adviser.patch('/settings', { reportFormats: { ...settings.reportFormats, collections: format } }), 200);
+
+    const doc: ReportDoc = expectStatus(await collector.get('/reports/collections'), 200).body;
+    expect(doc.paperSize).toBe('LEGAL');
+    // the org has no logo in the tests, so only the uploaded one shows; the first is closest to the text
+    expect(doc.header).toMatchObject({ logosLeft: [`/api/public/ays/${ay.id}/report-logo/${logo}`], logosRight: [`/api/public/ays/${ay.id}/report-logo/${logo}`], logoSize: 64 });
+    expect(doc.header.lines).toEqual([
+      { text: 'Republic of the Philippines', bold: false, size: 10, align: 'center' },
+      { text: 'Collections for 2026-2027', bold: true, size: 14, align: 'left' },
+    ]);
+    // hidden signatories are left out; a blank name is whoever printed it
+    expect(doc.signatories).toEqual([
+      { label: 'Prepared by', name: 'Carlo Reyes', title: 'Collector' },
+      { label: 'Audited by', name: 'Ana Cruz', title: 'Auditor' },
+    ]);
+    // the logo loads without signing in, like the organization's logo; other uploads don't
+    expectStatus(await collector.get(`/public/ays/${ay.id}/report-logo/${logo}`), 200);
+    const other = expectStatus(await adviser.upload('/uploads', pngBuffer(), 'private.png'), 201).body.id;
+    expectStatus(await collector.get(`/public/ays/${ay.id}/report-logo/${other}`), 404);
+
+    // other reports keep their own format
+    const usage: ReportDoc = expectStatus(await adviser.get('/reports/fund-usage'), 200).body;
+    expect(usage.paperSize).toBe('LETTER');
+    expect(usage.header.logosLeft).toEqual([]);
+  });
+
+  it('only takes images uploaded here as logos, and only from the adviser', async () => {
+    const settings = expectStatus(await adviser.get('/settings'), 200).body;
+    const withLogo = (id: string) => ({ ...settings.reportFormats, fund: { ...settings.reportFormats.fund, logosRight: [id] } });
+    expect((await adviser.patch('/settings', { reportFormats: withLogo(randomUUID()) })).body.error.code).toBe('BAD_LOGO');
+    expect((await adviser.patch('/settings', { reportFormats: { ...settings.reportFormats, fund: { ...settings.reportFormats.fund, logoSize: 500 } } })).status).toBe(400);
+    expect((await collector.patch('/settings', { reportFormats: settings.reportFormats })).status).toBe(403);
   });
 });

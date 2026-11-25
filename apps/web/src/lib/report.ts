@@ -1,4 +1,4 @@
-import { centavosPlain, formatReportCell, reportCsv, type ReportCell, type ReportCellType, type ReportDoc } from '@sft/shared';
+import { centavosPlain, formatReportCell, reportCsv, type ReportCell, type ReportCellType, type ReportDoc, type ReportHeader } from '@sft/shared';
 import { asJpeg, fileImages } from './pdfPages';
 
 /** One cell as text (shared with the API tests, which check the CSV). */
@@ -27,18 +27,65 @@ export function downloadCsv(doc: ReportDoc) {
 
 // ───────────────────────────── PDF ─────────────────────────────
 
-async function imageData(url: string) {
+/** A logo as JPEG data (any image type, transparency on white), or null if it can't be read. */
+async function logoImage(url: string) {
   try {
-    const blob = await (await fetch(url)).blob();
-    return await new Promise<string>((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(String(r.result));
-      r.onerror = reject;
-      r.readAsDataURL(blob);
-    });
+    return await asJpeg(url);
   } catch {
     return null;
   }
+}
+
+type Pdf = InstanceType<(typeof import('jspdf'))['jsPDF']>;
+
+/**
+ * The letterhead, as on the printed page: logos at each side (the first closest to the text),
+ * the header lines between them. Returns the y below it.
+ */
+async function drawHeader(pdf: Pdf, h: ReportHeader, M: number, y: number) {
+  const W = pdf.internal.pageSize.getWidth();
+  const side = Math.max(h.logosLeft.length, h.logosRight.length);
+  if (!side && !h.lines.length) return y;
+  const size = h.logoSize;
+  const gap = 6;
+  const sideW = side ? side * size + (side - 1) * gap + 12 : 0;
+  const textLeft = M + sideW;
+  const textRight = W - M - sideW;
+
+  // the text block, measured first so it can sit in the middle of the logos
+  const blocks = h.lines.map((l) => {
+    pdf.setFont('helvetica', l.bold ? 'bold' : 'normal').setFontSize(l.size);
+    const lines: string[] = pdf.splitTextToSize(l.text, textRight - textLeft);
+    return { l, lines, height: lines.length * l.size * 1.2 };
+  });
+  const textH = blocks.reduce((s, b) => s + b.height, 0);
+  const headerH = Math.max(side ? size : 0, textH);
+
+  const place = async (url: string, x: number) => {
+    const img = await logoImage(url);
+    if (!img) return;
+    const scale = Math.min(size / img.width, size / img.height);
+    const w = img.width * scale;
+    const ih = img.height * scale;
+    pdf.addImage(img.data, 'JPEG', x + (size - w) / 2, y + (headerH - ih) / 2, w, ih, undefined, 'FAST');
+  };
+  for (const [i, url] of h.logosLeft.entries()) await place(url, textLeft - 12 - (i + 1) * size - i * gap);
+  for (const [i, url] of h.logosRight.entries()) await place(url, textRight + 12 + i * (size + gap));
+
+  let ty = y + (headerH - textH) / 2;
+  pdf.setTextColor(0);
+  for (const { l, lines } of blocks) {
+    pdf.setFont('helvetica', l.bold ? 'bold' : 'normal').setFontSize(l.size);
+    for (const line of lines) {
+      ty += l.size;
+      const x = l.align === 'center' ? (textLeft + textRight) / 2 : l.align === 'right' ? textRight : textLeft;
+      pdf.text(line, x, ty, { align: l.align });
+      ty += l.size * 0.2;
+    }
+  }
+  const bottom = y + headerH + 8;
+  pdf.setDrawColor(180).line(M, bottom, W - M, bottom);
+  return bottom + 12;
 }
 
 /**
@@ -52,26 +99,7 @@ export async function downloadPdf(doc: ReportDoc) {
   const M = 36;
   let y = M;
 
-  const logo = doc.header.logoUrl ? await imageData(doc.header.logoUrl) : null;
-  if (logo) {
-    try {
-      pdf.addImage(logo, M, y, 40, 40);
-    } catch {
-      // an image format jsPDF can't read: leave the logo out
-    }
-  }
-  const x = logo ? M + 50 : M;
-  pdf.setFont('helvetica', 'bold').setFontSize(13).text(doc.header.orgName, x, y + 12);
-  pdf.setFont('helvetica', 'normal').setFontSize(9);
-  const sub = [doc.header.collegeName, doc.header.schoolName].filter(Boolean).join(' · ');
-  if (sub) pdf.text(sub, x, y + 25);
-  pdf.text(`Academic year ${doc.header.academicYear}`, x, y + 37);
-  y += 54;
-  if (doc.header.headerText) {
-    const lines = pdf.splitTextToSize(doc.header.headerText, W - 2 * M);
-    pdf.text(lines, M, y);
-    y += lines.length * 11 + 4;
-  }
+  y = await drawHeader(pdf, doc.header, M, y);
   pdf.setFont('helvetica', 'bold').setFontSize(15).text(doc.title, M, y + 6);
   y += 20;
   if (doc.subtitle) {
@@ -131,21 +159,26 @@ export async function downloadPdf(doc: ReportDoc) {
   }
   pdf.setTextColor(0);
 
-  // signatures, on a new page when there's no room left
+  // signatures, at most three a row, each row on a new page when there's no room left
   const H = pdf.internal.pageSize.getHeight();
-  if (y + 24 + 60 > H - 30) {
-    pdf.addPage();
-    y = M;
+  const perRow = Math.min(3, Math.max(1, doc.signatories.length));
+  const colW = (W - 2 * M) / perRow;
+  pdf.setTextColor(0).setDrawColor(0);
+  for (let row = 0; row * perRow < doc.signatories.length; row++) {
+    if (y + 24 + 60 > H - 30) {
+      pdf.addPage();
+      y = M;
+    }
+    y += 24;
+    doc.signatories.slice(row * perRow, (row + 1) * perRow).forEach((s, i) => {
+      const sx = M + i * colW;
+      pdf.setFont('helvetica', 'normal').setFontSize(9).text(s.label, sx, y);
+      pdf.line(sx, y + 34, sx + colW - 30, y + 34);
+      pdf.setFont('helvetica', 'bold').text(s.name || ' ', sx, y + 46);
+      pdf.setFont('helvetica', 'normal').text(s.title || ' ', sx, y + 57);
+    });
+    y += 60;
   }
-  y += 24;
-  const colW = (W - 2 * M) / doc.signatories.length;
-  doc.signatories.forEach((s, i) => {
-    const sx = M + i * colW;
-    pdf.setFontSize(9).text(s.label, sx, y);
-    pdf.line(sx, y + 34, sx + colW - 30, y + 34);
-    pdf.setFont('helvetica', 'bold').text(s.name || ' ', sx, y + 46);
-    pdf.setFont('helvetica', 'normal').text(s.title || ' ', sx, y + 57);
-  });
 
   // supporting documents last: each photo or PDF page on its own page, fitted and labelled
   for (const group of doc.annex?.groups ?? []) {

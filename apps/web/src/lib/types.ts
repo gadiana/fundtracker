@@ -1,4 +1,4 @@
-import type { AppRole, EventDefinition, EventTemplate, MembershipStatus, PasswordPolicy, Permission } from '@sft/shared';
+import type { AppRole, EventDefinition, EventTemplate, MembershipStatus, PasswordPolicy, Permission, ReportFormat, ReportKind } from '@sft/shared';
 
 export interface AyEntry {
   id: string;
@@ -195,6 +195,8 @@ export interface Settings {
   reportNotedByName: string | null;
   reportNotedByTitle: string | null;
   reportPaperSize: 'A4' | 'LETTER' | 'LEGAL';
+  /** every report's format (defaults filled in) */
+  reportFormats: Record<ReportKind, ReportFormat>;
   emailSenderName: string | null;
   emailSenderAddress: string | null;
   emailReplyTo: string | null;

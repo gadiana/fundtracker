@@ -2,6 +2,7 @@ import { Prisma, type AcademicYear, type AySetting } from '@prisma/client';
 import {
   REPORT_TITLES,
   centavosPlain,
+  fillHeaderText,
   formatPersonName,
   formatReportCell,
   type ReportDoc,
@@ -18,7 +19,7 @@ import { canSeeConfidential, fundLabelFor } from '../../lib/confidential';
 import { conflict, notFound } from '../../lib/http';
 import { endOfDayExclusive, periodLabel, startOfDay } from '../../lib/time';
 import { canViewRequest, receiptRef, requestInclude } from '../fund-requests/service';
-import { logoUrl } from '../settings/service';
+import { reportFormats, reportLogoUrl } from './formats';
 import { studentCharges } from '../students/service';
 import {
   collectionByDay,
@@ -48,32 +49,39 @@ export interface ReportContext {
 
 const RESTRICTED_NOTE = 'Amounts in restricted (confidential) funds are combined into one line or left out, as your position may not see them.';
 
+/**
+ * The parts every report shares, laid out as the adviser set the report's format (Settings →
+ * Reports). `signatories` in `rest` (the liquidation report's own) come before the format's.
+ */
 function base(kind: ReportKind, ctx: ReportContext, rest: Pick<ReportDoc, 'filters' | 'summary' | 'tables'> & Partial<ReportDoc>): ReportDoc {
   const s = ctx.settings;
-  const preparedBy = s.reportPreparedByName
-    ? { name: s.reportPreparedByName, title: s.reportPreparedByTitle ?? '' }
-    : { name: ctx.actor.name, title: ctx.actor.designation ?? '' };
+  const format = reportFormats(s)[kind];
+  const logos = (list: typeof format.logosLeft) => list.map((l) => reportLogoUrl(s, l)).filter((u): u is string => Boolean(u));
+  const { signatories: own = [], ...others } = rest;
   return {
     kind,
     title: REPORT_TITLES[kind],
     notes: [],
     header: {
       orgName: s.orgName || 'Fund Tracker',
-      schoolName: s.schoolName,
-      collegeName: s.collegeName,
-      logoUrl: s.logoFileId ? logoUrl(ctx.ay.id, 'org', s.logoFileId) : null,
-      headerText: s.reportHeaderText,
       academicYear: ctx.ay.label,
+      logosLeft: logos(format.logosLeft),
+      logosRight: logos(format.logosRight),
+      logoSize: format.logoSize,
+      lines: format.headerLines.filter((l) => l.text).map((l) => ({ ...l, text: fillHeaderText(l.text, ctx.ay.label) })),
     },
     signatories: [
-      { label: 'Prepared by', ...preparedBy },
-      { label: 'Noted by', name: s.reportNotedByName ?? '', title: s.reportNotedByTitle ?? 'Adviser' },
+      ...own,
+      // a signatory without a name is whoever generates the report
+      ...format.signatories
+        .filter((x) => x.show)
+        .map((x) => (x.name ? { label: x.label, name: x.name, title: x.position } : { label: x.label, name: ctx.actor.name, title: x.position || (ctx.actor.designation ?? '') })),
     ],
-    paperSize: s.reportPaperSize,
+    paperSize: format.paperSize,
     timezone: s.timezone,
     generatedAt: new Date().toISOString(),
     generatedBy: ctx.actor.name,
-    ...rest,
+    ...others,
   };
 }
 
@@ -648,7 +656,6 @@ export async function liquidationReport(ctx: ReportContext, requestId: string): 
     signatories: [
       { label: 'Prepared by', name: l.submittedByName, title: l.submittedByDesignation },
       { label: 'Approved by', name: l.approvedByName ?? '', title: l.approvedByDesignation ?? '' },
-      { label: 'Noted by', name: ctx.settings.reportNotedByName ?? '', title: ctx.settings.reportNotedByTitle ?? 'Adviser' },
       // whoever received the money signs for it: the requestor for a reimbursement, the treasurer for returned change
       ...(l.settlementKind === 'reimburse' ? [{ label: 'Reimbursement received by', name: r.requestorName, title: r.requestorDesignation ?? '' }] : []),
       ...(l.settlementKind === 'return' ? [{ label: 'Change received by', name: l.settledByName ?? '', title: l.settledByDesignation ?? '' }] : []),

@@ -4,6 +4,7 @@ import { prisma } from '../../db';
 import { notFound, uuidParam } from '../../lib/http';
 import { getCurrentAy, getSettings, passwordPolicyFrom } from '../../lib/settings';
 import { sendStoredFile } from '../../lib/uploads';
+import { reportLogoFileIds } from '../reports/formats';
 import { logoUrl } from '../settings/service';
 
 /** No login needed: branding and consent text for the login/signup pages, and logos. */
@@ -42,6 +43,17 @@ publicRouter.get('/ays/:ayId/logo', async (req, res) => {
     include: { logoFile: true, receiptLogo: true },
   });
   const file = req.query.kind === 'receipt' ? (settings?.receiptLogo ?? settings?.logoFile) : settings?.logoFile;
+  if (!file) throw notFound('No logo.');
+  await sendStoredFile(res, file, { publicCache: true });
+});
+
+/** A logo in a report's header (Settings → Reports): public like the organization's logo. */
+publicRouter.get('/ays/:ayId/report-logo/:fileId', async (req, res) => {
+  const academicYearId = uuidParam(req.params.ayId);
+  const fileId = uuidParam(req.params.fileId);
+  const settings = await prisma.aySetting.findUnique({ where: { academicYearId } });
+  if (!settings || !reportLogoFileIds(settings.reportFormats).includes(fileId)) throw notFound('No logo.');
+  const file = await prisma.storedFile.findFirst({ where: { id: fileId, academicYearId } });
   if (!file) throw notFound('No logo.');
   await sendStoredFile(res, file, { publicCache: true });
 });

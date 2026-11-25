@@ -1,12 +1,13 @@
 import { Router, type Request } from 'express';
 import type { Prisma } from '@prisma/client';
-import { BRANDING_KEYS, settingsPatchSchema } from '@sft/shared';
+import { BRANDING_KEYS, LOGO_MIME_TYPES, settingsPatchSchema } from '@sft/shared';
 import { prisma } from '../../db';
 import { writeAudit } from '../../lib/audit';
-import { conflict, forbidden } from '../../lib/http';
+import { badRequest, conflict, forbidden } from '../../lib/http';
 import { invalidateSecurityCache } from '../../lib/settings';
 import { requireAuth } from '../../middleware/auth';
 import { ayContext, ctxOf, requireAdviser, requireOpenAy } from '../../middleware/ay';
+import { reportLogoFileIds } from '../reports/formats';
 import { notificationSettingsRouter } from './notifications';
 import { changedFields, SECURITY_KEYS, serializeSettings, storedPublicFields } from './service';
 
@@ -44,6 +45,13 @@ settingsRouter.patch('/', requireOpenAy, async (req, res) => {
         `Year levels above ${n} are still in use (${students} student(s), ${fundLevels} fund setting(s)). Move them first.`,
       );
     }
+  }
+
+  // report logos must be images uploaded to this AY
+  if (patch.reportFormats) {
+    const ids = reportLogoFileIds(patch.reportFormats);
+    const images = await db.storedFile.count({ where: { id: { in: ids }, mimeType: { in: [...LOGO_MIME_TYPES] } } });
+    if (images !== ids.length) throw badRequest('BAD_LOGO', 'A report logo must be a JPEG, PNG or WebP image uploaded here.');
   }
 
   const { publicFields, ...rest } = patch;
