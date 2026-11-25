@@ -15,11 +15,16 @@ export async function startVisit(userId: string, sessionId: string, at = new Dat
   await prisma.userVisit.create({ data: { userId, sessionId, startedAt: at, lastSeenAt: at } });
 }
 
-/** Records that the session is in use now: extends the current visit, or starts a new one after a gap. */
+/**
+ * Records that the session is in use now: extends the current visit, or starts a new one after a gap.
+ * Two requests at the same moment can find a visit the other just started a few milliseconds
+ * later, so the time only ever moves forward.
+ */
 export async function touchVisit(userId: string, sessionId: string, at = new Date()) {
   const current = await prisma.userVisit.findFirst({ where: { sessionId }, orderBy: { startedAt: 'desc' } });
   if (current && !current.endedAt && at.getTime() - current.lastSeenAt.getTime() <= OFFLINE_AFTER_MS) {
-    await prisma.userVisit.update({ where: { id: current.id }, data: { lastSeenAt: at } });
+    const lastSeenAt = new Date(Math.max(at.getTime(), current.startedAt.getTime(), current.lastSeenAt.getTime()));
+    await prisma.userVisit.update({ where: { id: current.id }, data: { lastSeenAt } });
   } else {
     await startVisit(userId, sessionId, at);
   }
