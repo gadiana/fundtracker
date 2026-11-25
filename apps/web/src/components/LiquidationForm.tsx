@@ -17,8 +17,6 @@ interface ItemDraft {
 interface ReceiptDraft {
   key: number;
   usedFor: string;
-  /** false for gas, fares and other expenses that come without an official receipt */
-  hasReceipt: boolean;
   payee: string;
   receiptNo: string;
   receiptDate: string;
@@ -26,40 +24,54 @@ interface ReceiptDraft {
   files: AttachedFile[];
 }
 
+/** A cost that came without a receipt (gas, fare, ...): just what it was and how much. */
+interface OtherDraft {
+  key: number;
+  description: string;
+  cost: number | null;
+}
+
 let nextKey = 1;
 const todayInManila = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const emptyItem = (): ItemDraft => ({ key: nextKey++, description: '', quantity: '1', unitCost: null });
-const emptyReceipt = (): ReceiptDraft => ({ key: nextKey++, usedFor: '', hasReceipt: true, payee: '', receiptNo: '', receiptDate: todayInManila(), items: [emptyItem()], files: [] });
+const emptyReceipt = (): ReceiptDraft => ({ key: nextKey++, usedFor: '', payee: '', receiptNo: '', receiptDate: todayInManila(), items: [emptyItem()], files: [] });
+const emptyOther = (): OtherDraft => ({ key: nextKey++, description: '', cost: null });
 
-/** A revision starts from the receipts sent last time, files included. */
-const fromPrevious = (receipts: LiquidationReceiptEntry[]): ReceiptDraft[] =>
-  receipts.map((r) => ({
-    key: nextKey++,
-    usedFor: r.usedFor,
-    hasReceipt: r.hasReceipt,
-    payee: r.payee ?? '',
-    receiptNo: r.receiptNo ?? '',
-    receiptDate: r.receiptDate,
-    items: r.items.map((i) => ({ key: nextKey++, description: i.description, quantity: String(i.quantity), unitCost: i.unitCost })),
-    files: r.attachments,
-  }));
+/** A revision starts from what was sent last time, files included. */
+const receiptsFrom = (receipts: LiquidationReceiptEntry[]): ReceiptDraft[] =>
+  receipts
+    .filter((r) => r.hasReceipt)
+    .map((r) => ({
+      key: nextKey++,
+      usedFor: r.usedFor,
+      payee: r.payee ?? '',
+      receiptNo: r.receiptNo ?? '',
+      receiptDate: r.receiptDate,
+      items: r.items.map((i) => ({ key: nextKey++, description: i.description, quantity: String(i.quantity), unitCost: i.unitCost })),
+      files: r.attachments,
+    }));
+const othersFrom = (receipts: LiquidationReceiptEntry[]): OtherDraft[] =>
+  receipts.filter((r) => !r.hasReceipt).flatMap((r) => r.items.map((i) => ({ key: nextKey++, description: i.description, cost: i.amount })));
 
 const qty = (i: ItemDraft) => (/^\d+$/.test(i.quantity.trim()) ? Number(i.quantity) : NaN);
 const itemAmount = (i: ItemDraft) => (Number.isFinite(qty(i)) && i.unitCost ? qty(i) * i.unitCost : 0);
 const receiptTotal = (r: ReceiptDraft) => r.items.reduce((s, i) => s + itemAmount(i), 0);
 
 /** What still stops the liquidation from being submitted, in words. */
-function problemsOf(receipts: ReceiptDraft[], needFiles: boolean, today: string) {
+function problemsOf(receipts: ReceiptDraft[], others: OtherDraft[], needFiles: boolean, today: string) {
   const out: string[] = [];
   receipts.forEach((r, n) => {
     const ref = `R-${n + 1}`;
     if (r.usedFor.trim().length < 2) out.push(`${ref}: say what it was used for.`);
-    if (!r.receiptDate) out.push(`${ref}: choose the date.`);
+    if (!r.receiptDate) out.push(`${ref}: choose the receipt date.`);
     else if (r.receiptDate > today) out.push(`${ref}: the date can't be in the future.`);
     r.items.forEach((i, k) => {
       if (!i.description.trim() || !(qty(i) >= 1) || !i.unitCost || i.unitCost <= 0) out.push(`${ref}, item ${k + 1}: fill in the item, quantity and unit cost.`);
     });
-    if (needFiles && r.hasReceipt && r.files.length === 0) out.push(`${ref}: add a photo or PDF of the receipt.`);
+    if (needFiles && r.files.length === 0) out.push(`${ref}: add a photo or PDF of the receipt.`);
+  });
+  others.forEach((o, k) => {
+    if (!o.description.trim() || !o.cost || o.cost <= 0) out.push(`Other expense ${k + 1}: fill in the item and its cost.`);
   });
   return out;
 }
@@ -81,27 +93,43 @@ export function LiquidationForm({
   /** opens the confirmation; the parent sends it */
   onSubmit: (body: LiquidationCreateInput, total: number) => void;
 }) {
-  const [receipts, setReceipts] = useState<ReceiptDraft[]>(() => (previous?.length ? fromPrevious(previous) : [emptyReceipt()]));
+  const [receipts, setReceipts] = useState<ReceiptDraft[]>(() => (previous?.length ? receiptsFrom(previous) : [emptyReceipt()]));
+  const [others, setOthers] = useState<OtherDraft[]>(() => (previous ? othersFrom(previous) : []));
   const [remarks, setRemarks] = useState('');
   const today = todayInManila();
-  const total = receipts.reduce((s, r) => s + receiptTotal(r), 0);
-  const problems = problemsOf(receipts, needFiles, today);
+  const othersTotal = others.reduce((s, o) => s + (o.cost ?? 0), 0);
+  const total = receipts.reduce((s, r) => s + receiptTotal(r), 0) + othersTotal;
+  const problems = problemsOf(receipts, others, needFiles, today);
 
   const update = (key: number, patch: Partial<ReceiptDraft>) => setReceipts((list) => list.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   const updateItem = (r: ReceiptDraft, key: number, patch: Partial<ItemDraft>) => update(r.key, { items: r.items.map((i) => (i.key === key ? { ...i, ...patch } : i)) });
+  const updateOther = (key: number, patch: Partial<OtherDraft>) => setOthers((list) => list.map((o) => (o.key === key ? { ...o, ...patch } : o)));
 
   function submit() {
     const body: LiquidationCreateInput = {
       remarks: remarks.trim() || null,
-      receipts: receipts.map((r) => ({
-        usedFor: r.usedFor.trim(),
-        hasReceipt: r.hasReceipt,
-        payee: r.payee.trim() || null,
-        receiptNo: (r.hasReceipt && r.receiptNo.trim()) || null,
-        receiptDate: r.receiptDate,
-        items: r.items.map((i) => ({ description: i.description.trim(), quantity: qty(i), unitCost: i.unitCost ?? 0 })),
-        attachmentIds: r.files.map((f) => f.id),
-      })),
+      receipts: [
+        ...receipts.map((r) => ({
+          usedFor: r.usedFor.trim(),
+          payee: r.payee.trim() || null,
+          receiptNo: r.receiptNo.trim() || null,
+          receiptDate: r.receiptDate,
+          items: r.items.map((i) => ({ description: i.description.trim(), quantity: qty(i), unitCost: i.unitCost ?? 0 })),
+          attachmentIds: r.files.map((f) => f.id),
+        })),
+        // the costs without a receipt go together as one last entry
+        ...(others.length
+          ? [
+              {
+                usedFor: 'Other expenses (no receipt)',
+                hasReceipt: false,
+                receiptDate: today,
+                items: others.map((o) => ({ description: o.description.trim(), quantity: 1, unitCost: o.cost ?? 0 })),
+                attachmentIds: [],
+              },
+            ]
+          : []),
+      ],
     };
     // the same arithmetic the server uses
     onSubmit(body, body.receipts.reduce((s, r) => s + entryTotal(r.items), 0));
@@ -115,54 +143,26 @@ export function LiquidationForm({
           <fieldset key={r.key} className="rounded-xl border border-slate-200 p-4">
             <div className="mb-3 flex items-center justify-between gap-2">
               <legend className="font-medium">
-                {r.hasReceipt ? 'Receipt' : 'Expense'} <span className="font-mono">{ref}</span>
+                Receipt <span className="font-mono">{ref}</span>
               </legend>
-              {receipts.length > 1 && (
+              {(receipts.length > 1 || others.length > 0) && (
                 <Button size="sm" variant="ghost" className="text-red-700" onClick={() => setReceipts((list) => list.filter((x) => x.key !== r.key))}>
                   <Trash2 className="size-4" aria-hidden /> Remove
                 </Button>
               )}
             </div>
 
-            <div role="radiogroup" aria-label={`Does ${ref} have a receipt?`} className="mb-3 inline-flex rounded-lg bg-slate-100 p-0.5 text-sm">
-              {[
-                { value: true, label: 'With receipt' },
-                { value: false, label: 'No receipt (gas, fare, …)' },
-              ].map((o) => (
-                <button
-                  key={o.label}
-                  type="button"
-                  role="radio"
-                  aria-checked={r.hasReceipt === o.value}
-                  onClick={() => update(r.key, { hasReceipt: o.value })}
-                  className={cx(
-                    'rounded-md px-3 py-1 transition-colors',
-                    r.hasReceipt === o.value ? 'bg-surface font-medium text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900',
-                  )}
-                >
-                  {o.label}
-                </button>
-              ))}
-            </div>
-            {!r.hasReceipt && (
-              <p className="mb-3 text-xs text-slate-500">
-                For costs that come without an official receipt, like gas, jeepney or tricycle fare, parking or tips. Say clearly what it was for; a photo (a ticket, the pump reading) is welcome but not needed.
-              </p>
-            )}
-
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Used for" htmlFor={`liq-${r.key}-for`}>
-                <Input id={`liq-${r.key}-for`} value={r.usedFor} onChange={(e) => update(r.key, { usedFor: e.target.value })} placeholder={r.hasReceipt ? 'e.g. Booth materials for the fair' : 'e.g. Gas for picking up the shirts'} maxLength={200} />
+                <Input id={`liq-${r.key}-for`} value={r.usedFor} onChange={(e) => update(r.key, { usedFor: e.target.value })} placeholder="e.g. Booth materials for the fair" maxLength={200} />
               </Field>
-              <Field label={r.hasReceipt ? 'Store / payee' : 'Paid to'} htmlFor={`liq-${r.key}-payee`} optional>
+              <Field label="Store / payee" htmlFor={`liq-${r.key}-payee`} optional>
                 <Input id={`liq-${r.key}-payee`} value={r.payee} onChange={(e) => update(r.key, { payee: e.target.value })} maxLength={150} />
               </Field>
-              {r.hasReceipt && (
-                <Field label="OR / receipt no." htmlFor={`liq-${r.key}-no`} optional>
-                  <Input id={`liq-${r.key}-no`} value={r.receiptNo} onChange={(e) => update(r.key, { receiptNo: e.target.value })} maxLength={60} />
-                </Field>
-              )}
-              <Field label={r.hasReceipt ? 'Receipt date' : 'Date spent'} htmlFor={`liq-${r.key}-date`}>
+              <Field label="OR / receipt no." htmlFor={`liq-${r.key}-no`} optional>
+                <Input id={`liq-${r.key}-no`} value={r.receiptNo} onChange={(e) => update(r.key, { receiptNo: e.target.value })} maxLength={60} />
+              </Field>
+              <Field label="Receipt date" htmlFor={`liq-${r.key}-date`}>
                 <Input id={`liq-${r.key}-date`} type="date" max={today} value={r.receiptDate} onChange={(e) => update(r.key, { receiptDate: e.target.value })} />
               </Field>
             </div>
@@ -212,13 +212,13 @@ export function LiquidationForm({
             </div>
 
             <div className="mt-3">
-              <Field label={`Photos or PDF of ${ref}`} htmlFor={`liq-${r.key}-files`} optional={!needFiles || !r.hasReceipt}>
+              <Field label={`Photos or PDF of ${ref}`} htmlFor={`liq-${r.key}-files`} optional={!needFiles}>
                 <FileUploader
                   files={r.files}
                   onChange={(files) => update(r.key, { files })}
                   allowedMime={allowedMime}
                   maxBytes={maxBytes}
-                  label={r.hasReceipt ? 'Add photos or a PDF of this receipt' : 'Add a photo, if you have one'}
+                  label="Add photos or a PDF of this receipt"
                 />
               </Field>
             </div>
@@ -232,8 +232,47 @@ export function LiquidationForm({
       })}
 
       <Button variant="secondary" onClick={() => setReceipts((list) => [...list, emptyReceipt()])}>
-        <Plus className="size-4" aria-hidden /> Add another receipt or expense
+        <Plus className="size-4" aria-hidden /> Add another receipt
       </Button>
+
+      <fieldset className="rounded-xl border border-slate-200 p-4">
+        <legend className="font-medium">Other expenses (no receipt)</legend>
+        {others.length > 0 && (
+          <>
+            <div className="mt-3 hidden grid-cols-[1fr_8rem_2rem] gap-2 px-0.5 pb-1 text-xs font-medium text-slate-500 sm:grid">
+              <span>Item</span>
+              <span>Cost</span>
+              <span />
+            </div>
+            <ul className="mt-3 space-y-2 sm:mt-0">
+              {others.map((o, k) => (
+                <li key={o.key} className="grid grid-cols-[1fr_8rem_2rem] items-center gap-2">
+                  <Input aria-label={`Other expense ${k + 1}`} placeholder="e.g. Gas" value={o.description} onChange={(e) => updateOther(o.key, { description: e.target.value })} maxLength={200} />
+                  <MoneyInput id={`liq-other-${o.key}`} ariaLabel={`Other expense ${k + 1} cost`} value={o.cost} onChange={(v) => updateOther(o.key, { cost: v })} />
+                  <button
+                    type="button"
+                    onClick={() => setOthers((list) => list.filter((x) => x.key !== o.key))}
+                    disabled={others.length === 1 && receipts.length === 0}
+                    className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-red-700 disabled:invisible"
+                    aria-label={`Remove other expense ${k + 1}`}
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+        <Button size="sm" variant="ghost" className="mt-2" onClick={() => setOthers((list) => [...list, emptyOther()])}>
+          <Plus className="size-4" aria-hidden /> Add item
+        </Button>
+        {others.length > 0 && (
+          <p className="mt-3 flex justify-between border-t border-slate-200 pt-2 text-sm font-semibold">
+            <span>Other expenses total</span>
+            <span className="tabular-nums">{formatMoney(othersTotal)}</span>
+          </p>
+        )}
+      </fieldset>
 
       <dl className="space-y-1 rounded-xl bg-slate-50 p-4 text-sm">
         <div className="flex justify-between">
@@ -241,7 +280,7 @@ export function LiquidationForm({
           <dd className="tabular-nums">{formatMoney(approvedAmount)}</dd>
         </div>
         <div className="flex justify-between font-semibold">
-          <dt>Total liquidated ({receipts.length} {receipts.length > 1 ? 'entries' : 'entry'})</dt>
+          <dt>Total liquidated</dt>
           <dd className="tabular-nums">{formatMoney(total)}</dd>
         </div>
         <div className={cx('flex justify-between border-t border-slate-200 pt-1', total > approvedAmount ? 'font-medium text-red-700' : 'text-slate-600')}>

@@ -292,7 +292,7 @@ export function RequestDetailPage() {
             <Card className="space-y-4 p-5">
               <div>
                 <h2 className="font-semibold">{r.status === 'revision_requested' ? 'Revise the liquidation' : 'Liquidate'}</h2>
-                <p className="mt-0.5 text-sm text-slate-500">Add every official receipt and the items on it, and any cost without a receipt (gas, fares, …).</p>
+                <p className="mt-0.5 text-sm text-slate-500">Add every official receipt and the items on it.</p>
                 {latest?.revisionMessage && r.status === 'revision_requested' && (
                   <Alert tone="warning" className="mt-2" title={`Message from ${latest.revisionRequestedByName}`}>
                     {latest.revisionMessage}
@@ -457,51 +457,74 @@ function LiquidationItem({ requestId, l }: { requestId: string; l: Liquidation }
       {l.revisionMessage && <p className="mt-1 text-sm text-amber-800">“{l.revisionMessage}”</p>}
 
       <ul className="mt-3 space-y-3">
-        {l.receipts.map((e) => (
-          <li key={e.id} className="rounded-lg bg-slate-50 p-3">
-            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-              <p className="text-sm font-medium">
-                <span className="font-mono">{e.ref}</span> · {e.usedFor}
-                {!e.hasReceipt && (
-                  <Badge tone="amber" className="ml-2">
-                    No receipt
-                  </Badge>
-                )}
-              </p>
-              <p className="text-xs text-slate-500">{[e.payee, e.receiptNo && `OR ${e.receiptNo}`, formatDate(`${e.receiptDate}T12:00:00+08:00`)].filter(Boolean).join(' · ')}</p>
-            </div>
-            <table className="mt-2 w-full table-fixed text-sm">
-              <thead className="text-xs text-slate-500">
-                <tr>
-                  <th scope="col" className="py-1 text-left font-medium">Item</th>
-                  <th scope="col" className="w-12 py-1 text-right font-medium">Qty</th>
-                  <th scope="col" className="hidden w-28 py-1 text-right font-medium sm:table-cell">Unit cost</th>
-                  <th scope="col" className="w-28 py-1 text-right font-medium">Amount</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {e.items.map((i, k) => (
-                  <tr key={k}>
-                    <td className="py-1 pr-2">{i.description}</td>
-                    <td className="py-1 text-right tabular-nums">{i.quantity}</td>
-                    <td className="hidden py-1 text-right tabular-nums sm:table-cell">{formatMoney(i.unitCost)}</td>
-                    <td className="py-1 text-right tabular-nums">{formatMoney(i.amount)}</td>
+        {l.receipts.map((e) =>
+          !e.hasReceipt ? (
+            <li key={e.id} className="rounded-lg bg-slate-50 p-3">
+              <p className="text-sm font-medium">Other expenses (no receipt)</p>
+              <table className="mt-2 w-full table-fixed text-sm">
+                <thead className="text-xs text-slate-500">
+                  <tr>
+                    <th scope="col" className="py-1 text-left font-medium">Item</th>
+                    <th scope="col" className="w-28 py-1 text-right font-medium">Cost</th>
                   </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t border-slate-300 font-semibold">
-                  <td className="py-1" colSpan={2}>
-                    {e.ref} total
-                  </td>
-                  <td className="hidden sm:table-cell" />
-                  <td className="py-1 text-right tabular-nums">{formatMoney(e.total)}</td>
-                </tr>
-              </tfoot>
-            </table>
-            <AttachmentLink requestId={requestId} set={e.id} files={e.attachments} label={e.hasReceipt ? `${e.ref} receipt` : `${e.ref} photo`} />
-          </li>
-        ))}
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {e.items.map((i, k) => (
+                    <tr key={k}>
+                      <td className="py-1 pr-2">{i.description}</td>
+                      <td className="py-1 text-right tabular-nums">{formatMoney(i.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-slate-300 font-semibold">
+                    <td className="py-1">Other expenses total</td>
+                    <td className="py-1 text-right tabular-nums">{formatMoney(e.total)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </li>
+          ) : (
+            <li key={e.id} className="rounded-lg bg-slate-50 p-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <p className="text-sm font-medium">
+                  <span className="font-mono">{e.ref}</span> · {e.usedFor}
+                </p>
+                <p className="text-xs text-slate-500">{[e.payee, e.receiptNo && `OR ${e.receiptNo}`, formatDate(`${e.receiptDate}T12:00:00+08:00`)].filter(Boolean).join(' · ')}</p>
+              </div>
+              <table className="mt-2 w-full table-fixed text-sm">
+                <thead className="text-xs text-slate-500">
+                  <tr>
+                    <th scope="col" className="py-1 text-left font-medium">Item</th>
+                    <th scope="col" className="w-12 py-1 text-right font-medium">Qty</th>
+                    <th scope="col" className="hidden w-28 py-1 text-right font-medium sm:table-cell">Unit cost</th>
+                    <th scope="col" className="w-28 py-1 text-right font-medium">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {e.items.map((i, k) => (
+                    <tr key={k}>
+                      <td className="py-1 pr-2">{i.description}</td>
+                      <td className="py-1 text-right tabular-nums">{i.quantity}</td>
+                      <td className="hidden py-1 text-right tabular-nums sm:table-cell">{formatMoney(i.unitCost)}</td>
+                      <td className="py-1 text-right tabular-nums">{formatMoney(i.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-slate-300 font-semibold">
+                    <td className="py-1" colSpan={2}>
+                      {e.ref} total
+                    </td>
+                    <td className="hidden sm:table-cell" />
+                    <td className="py-1 text-right tabular-nums">{formatMoney(e.total)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+              <AttachmentLink requestId={requestId} set={e.id} files={e.attachments} label={`${e.ref} receipt`} />
+            </li>
+          ),
+        )}
       </ul>
 
       <dl className="mt-3 space-y-0.5 text-sm">

@@ -130,7 +130,7 @@ export const receiptRef = (sortOrder: number) => `R-${sortOrder}`;
 
 export const entryView = (e: EntryWithAll) => ({
   id: e.id,
-  ref: receiptRef(e.sortOrder),
+  ref: e.hasReceipt ? receiptRef(e.sortOrder) : 'Other',
   usedFor: e.usedFor,
   hasReceipt: e.hasReceipt,
   payee: e.payee,
