@@ -289,6 +289,52 @@ describe('report formats', () => {
     expect(usage.header.logosLeft).toEqual([]);
   });
 
+  it('says in the activity log what changed in a report format, in words', async () => {
+    const settings = expectStatus(await adviser.get('/settings'), 200).body;
+    const was = settings.reportFormats.collections;
+    const logo = expectStatus(await adviser.upload('/uploads', pngBuffer(), 'seal.png'), 201).body.id;
+    const next = {
+      ...was,
+      paperSize: 'LEGAL',
+      logosRight: [logo],
+      headerLines: was.headerLines.map((l: { text: string }, i: number) => (i === 0 ? { ...l, align: 'left', size: 18 } : l)),
+      signatories: [...was.signatories, { label: 'Noted by', name: 'Maria Santos', position: 'Adviser', show: true }],
+    };
+    expectStatus(await adviser.patch('/settings', { reportFormats: { ...settings.reportFormats, collections: next } }), 200);
+
+    const entry = expectStatus(await adviser.get('/audit?entityType=settings'), 200).body.items[0];
+    expect(entry.summary).toBe('Maria Santos changed the settings');
+    expect(entry.details).toEqual([
+      'Collection report: paper size Letter → Legal',
+      'Collection report: added a logo on the right',
+      `Collection report: header line "${was.headerLines[0].text}": size 16 pt → 18 pt, centered → left`,
+      'Collection report: added signatory Noted by: Maria Santos (Adviser)',
+    ]);
+    // the other reports didn't change, so they aren't listed
+    expect(entry.details.join(' ')).not.toContain('Fund report');
+
+    // hiding a signatory and saving without changes
+    const hidden = { ...next, signatories: next.signatories.map((s: { label: string }) => (s.label === 'Noted by' ? { ...s, show: false } : s)) };
+    expectStatus(await adviser.patch('/settings', { reportFormats: { ...settings.reportFormats, collections: hidden } }), 200);
+    expect(expectStatus(await adviser.get('/audit?entityType=settings'), 200).body.items[0].details).toEqual([
+      'Collection report: Noted by: Maria Santos (Adviser): hidden from the report',
+    ]);
+
+    // an entry logged before the old format was kept in full: reports never saved count as their default
+    await prisma.auditLog.create({
+      data: {
+        academicYearId: ay.id,
+        actorName: 'Maria Santos',
+        action: 'settings_change',
+        entityType: 'settings',
+        entityId: ay.id,
+        beforeData: { reportFormats: {} },
+        afterData: { reportFormats: { ...settings.reportFormats, fund: { ...settings.reportFormats.fund, paperSize: 'A4' } } },
+      },
+    });
+    expect(expectStatus(await adviser.get('/audit?entityType=settings'), 200).body.items[0].details).toEqual(['Fund report: paper size Letter → A4']);
+  });
+
   it('only takes images uploaded here as logos, and only from the adviser', async () => {
     const settings = expectStatus(await adviser.get('/settings'), 200).body;
     const withLogo = (id: string) => ({ ...settings.reportFormats, fund: { ...settings.reportFormats.fund, logosRight: [id] } });
