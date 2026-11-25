@@ -215,6 +215,8 @@ export async function runSetup(input: {
       const designationMap = new Map<string, string>();
       const programMap = new Map<string, string>();
       const sectionMap = new Map<string, string>();
+      /** the target's sections by "programId|yearLevel|name" */
+      const newSectionByKey = new Map<string, string>();
 
       // ── Settings (or defaults) ──
       if (options.settings && src) {
@@ -268,8 +270,11 @@ export async function runSetup(input: {
           programMap.set(p.id, created.id);
         }
         for (const s of src.sections) {
-          const created = await tx.section.create({ data: { academicYearId: T, name: s.name } });
+          const programId = programMap.get(s.programId);
+          if (!programId) continue; // its program wasn't copied
+          const created = await tx.section.create({ data: { academicYearId: T, programId, yearLevel: s.yearLevel, name: s.name } });
           sectionMap.set(s.id, created.id);
+          newSectionByKey.set(`${programId}|${s.yearLevel}|${s.name}`, created.id);
         }
         summary.designations = designationMap.size;
         summary.programs = programMap.size;
@@ -422,6 +427,7 @@ export async function runSetup(input: {
       if (options.promoteStudents && src) {
         const students: Prisma.StudentCreateManyInput[] = [];
         const tokens: Prisma.StudentQrTokenCreateManyInput[] = [];
+        const sectionNameById = new Map(src.sections.map((x) => [x.id, x.name]));
         for (const s of src.promotable) {
           const programId = programMap.get(s.programId);
           if (!programId) {
@@ -441,7 +447,8 @@ export async function runSetup(input: {
             nameKeyLoose: s.nameKeyLoose,
             programId,
             yearLevel: s.yearLevel + 1,
-            sectionId: s.sectionId ? (sectionMap.get(s.sectionId) ?? null) : null,
+            // moving up a year: the section with the same name in their program's next year, if there is one
+            sectionId: (s.sectionId && sectionNameById.get(s.sectionId) && newSectionByKey.get(`${programId}|${s.yearLevel + 1}|${sectionNameById.get(s.sectionId)}`)) || null,
             email: s.email,
             contactNo: s.contactNo,
             status: 'active',

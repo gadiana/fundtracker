@@ -80,7 +80,7 @@ function base(kind: ReportKind, ctx: ReportContext, rest: Pick<ReportDoc, 'filte
 async function lookups(academicYearId: string, ids: { programId?: string; sectionId?: string; processedById?: string; fundId?: string }) {
   const [program, section, staff, fund] = await Promise.all([
     ids.programId ? prisma.program.findFirst({ where: { id: ids.programId, academicYearId } }) : null,
-    ids.sectionId ? prisma.section.findFirst({ where: { id: ids.sectionId, academicYearId } }) : null,
+    ids.sectionId ? prisma.section.findFirst({ where: { id: ids.sectionId, academicYearId }, include: { program: true } }) : null,
     ids.processedById ? prisma.user.findUnique({ where: { id: ids.processedById } }) : null,
     ids.fundId ? prisma.fund.findFirst({ where: { id: ids.fundId, academicYearId } }) : null,
   ]);
@@ -103,7 +103,7 @@ export async function collectionReport(ctx: ReportContext, f: CollectionFilter):
   const filters = [{ label: 'Period', value: periodLabel(f.from, f.to) }];
   if (names.program) filters.push({ label: 'Program', value: names.program.code });
   if (f.yearLevel) filters.push({ label: 'Year level', value: String(f.yearLevel) });
-  if (names.section) filters.push({ label: 'Section', value: names.section.name });
+  if (names.section) filters.push({ label: 'Section', value: `${names.section.program.code} ${names.section.yearLevel}-${names.section.name}` });
   if (names.staff) filters.push({ label: 'Processed by', value: formatPersonName(names.staff) });
   if (f.status !== 'all') filters.push({ label: 'Status', value: f.status === 'posted' ? 'Posted only' : 'Voided only' });
   if (f.q) filters.push({ label: 'Search', value: f.q });
@@ -478,7 +478,7 @@ export async function clearanceReport(ctx: ReportContext, f: z.infer<typeof clea
   ];
   if (names.program) filters.push({ label: 'Program', value: names.program.code });
   if (f.yearLevel) filters.push({ label: 'Year level', value: String(f.yearLevel) });
-  if (names.section) filters.push({ label: 'Section', value: names.section.name });
+  if (names.section) filters.push({ label: 'Section', value: `${names.section.program.code} ${names.section.yearLevel}-${names.section.name}` });
   if (f.q) filters.push({ label: 'Search', value: f.q });
 
   return base('clearance', ctx, {

@@ -66,6 +66,10 @@ settingsRouter.patch('/', requireOpenAy, async (req, res) => {
   }
 
   const updated = await db.$transaction(async (tx) => {
+    // fewer year levels: their sections go too (no student is in them, checked above)
+    if (patch.yearLevelCount !== undefined && patch.yearLevelCount < before.yearLevelCount) {
+      await tx.section.deleteMany({ where: { academicYearId: ay.id, yearLevel: { gt: patch.yearLevelCount } } });
+    }
     const updated = await tx.aySetting.update({
       where: { academicYearId: ay.id },
       data: { ...data, updatedById: actor.id, updatedByName: actor.name },

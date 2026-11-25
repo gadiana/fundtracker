@@ -1,4 +1,6 @@
 import { useState, type ReactNode } from 'react';
+import type { SectionOption } from '../../lib/types';
+import { SectionFilter } from '../../components/SectionSelect';
 import { Link, useSearchParams } from 'react-router';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { History, Printer, Search, Sheet } from 'lucide-react';
@@ -15,7 +17,7 @@ export interface HistoryOptions {
   canSeeUsage: boolean;
   yearLevelCount: number;
   programs: { id: string; code: string }[];
-  sections: { id: string; name: string }[];
+  sections: SectionOption[];
   staff: { id: string; name: string }[];
   funds: { id: string; name: string }[];
 }
@@ -128,6 +130,8 @@ function useFilters(kind: keyof typeof FILTER_KEYS) {
     const next = new URLSearchParams(params);
     if (value) next.set(key, value);
     else next.delete(key);
+    // a section belongs to one program and year: a new program or year clears it
+    if (key === 'programId' || key === 'yearLevel') next.delete('sectionId');
     next.delete('page');
     setParams(next);
   };
@@ -272,14 +276,7 @@ function CollectionHistory({ options: o }: { options: HistoryOptions }) {
             </option>
           ))}
         </Select>
-        <Select aria-label="Section" value={v.sectionId} onChange={(e) => f.set('sectionId', e.target.value)}>
-          <option value="">All sections</option>
-          {o.sections.map((s) => (
-            <option key={s.id} value={s.id}>
-              Section {s.name}
-            </option>
-          ))}
-        </Select>
+        <SectionFilter sections={o.sections} programs={o.programs} programId={v.programId} yearLevel={v.yearLevel} value={v.sectionId!} onChange={(x) => f.set('sectionId', x)} />
         <div className="grid grid-cols-2 gap-2">
           <Select aria-label="Status" value={v.status} onChange={(e) => f.set('status', e.target.value)}>
             <option value="">Posted and voided</option>

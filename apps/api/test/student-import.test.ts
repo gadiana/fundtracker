@@ -16,7 +16,7 @@ beforeEach(async () => {
   ay = created.ay;
   const bsit = await createProgram(ay.id, 'BSIT');
   await createProgram(ay.id, 'BSCS');
-  await createSection(ay.id, 'A');
+  await createSection(ay.id, 'A', bsit.id, 1);
   adviser = await registerAndLogin('adviser@test.ph', undefined, ['Maria', 'Santos']);
   const c = await registerAndLogin('collector@test.ph');
   const pending = (await adviser.get('/members?status=pending')).body.items[0];
@@ -54,6 +54,13 @@ const CSV = [
 ].join('\n');
 
 describe('CSV import', () => {
+  it("accepts a section only in the program and year level it belongs to", async () => {
+    const csv = [HEADER, '3001,Uy,Lea,,,BSIT,1,A,,', '3002,Uy,Mae,,,BSCS,1,A,,', '3003,Uy,Joy,,,BSIT,2,A,,'].join('\n');
+    const res = expectStatus(await collector.post('/students/import/preview', { csv }), 200).body;
+    expect(res.rows.map((r: { status: string }) => r.status)).toEqual(['ok', 'error', 'error']);
+    expect(res.rows[1].messages).toContain('BSCS year 1 has no section "A". Add it in Settings first.');
+  });
+
   it('previews every row without saving anything', async () => {
     const res = expectStatus(await collector.post('/students/import/preview', { csv: CSV }), 200).body;
     expect(res.counts).toEqual({ total: 9, ok: 2, similar: 1, exact: 1, error: 5 });

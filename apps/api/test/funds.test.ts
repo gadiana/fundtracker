@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { AcademicYear, Program, Section } from '@prisma/client';
 import { centavosToInput, parsePesos } from '@sft/shared';
 import { prisma } from '../src/db';
-import { createProgram, createSection, recordCollection } from './fixtures';
+import { createProgram, createSection, recordCollection, sectionFor } from './fixtures';
 import { Client, createAy, expectStatus, registerAndLogin, resetDb, type Client as ClientType } from './helpers';
 
 let ay: AcademicYear;
@@ -29,7 +29,7 @@ async function addStudent(number: string, yearLevel: number, program = bsit, ext
       lastName: `Last${number}`,
       programId: program.id,
       yearLevel,
-      sectionId: sectionA.id,
+      sectionId: (await sectionFor(ay.id, program.id, yearLevel)).id,
       ...extra,
     }),
     201,
@@ -57,7 +57,7 @@ beforeEach(async () => {
   designations = created.designations;
   bsit = await createProgram(ay.id, 'BSIT');
   bscs = await createProgram(ay.id, 'BSCS');
-  sectionA = await createSection(ay.id, 'A');
+  sectionA = await createSection(ay.id, 'A', bsit.id, 1);
   adviser = await registerAndLogin('adviser@test.ph', undefined, ['Maria', 'Santos']);
   const c = await approve('collector@test.ph', designations.collector.id);
   collector = c.client;

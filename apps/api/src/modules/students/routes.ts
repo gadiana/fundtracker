@@ -120,12 +120,13 @@ studentsRouter.get('/meta', async (req, res) => {
   const { db, ay, perms } = ctxOf(req);
   const [programs, sections, settings] = await Promise.all([
     db.program.findMany({ where: { isActive: true }, orderBy: { code: 'asc' } }),
-    db.section.findMany({ where: { isActive: true }, orderBy: { name: 'asc' } }),
+    db.section.findMany({ where: { isActive: true }, orderBy: [{ yearLevel: 'asc' }, { name: 'asc' }] }),
     db.aySetting.findUnique({ where: { academicYearId: ay.id } }),
   ]);
   res.json({
     programs: programs.map((p) => ({ id: p.id, code: p.code, name: p.name })),
-    sections: sections.map((s) => ({ id: s.id, name: s.name })),
+    // each section belongs to one program and year level; the forms show only the matching ones
+    sections: sections.map((s) => ({ id: s.id, name: s.name, programId: s.programId, yearLevel: s.yearLevel })),
     yearLevelCount: settings?.yearLevelCount ?? 4,
     canOverrideDuplicates: perms.includes('manage'),
   });
@@ -287,7 +288,14 @@ studentsRouter.patch('/:id', requireOpenAy, async (req, res) => {
     suffix: 'suffix' in body ? (body.suffix ?? null) : before.suffix,
     programId: body.programId ?? before.programId,
     yearLevel: body.yearLevel ?? before.yearLevel,
-    sectionId: 'sectionId' in body ? (body.sectionId ?? null) : before.sectionId,
+    // a section belongs to one program and year level: moving the student elsewhere without
+    // choosing a new section leaves them without one
+    sectionId:
+      'sectionId' in body
+        ? (body.sectionId ?? null)
+        : (body.programId ?? before.programId) === before.programId && (body.yearLevel ?? before.yearLevel) === before.yearLevel
+          ? before.sectionId
+          : null,
     email: 'email' in body ? (body.email ?? null) : before.email,
     contactNo: 'contactNo' in body ? (body.contactNo ?? null) : before.contactNo,
   };

@@ -75,7 +75,7 @@ export async function analyzeCsv(academicYearId: string, csv: string) {
   ]);
   const maxYear = settings?.yearLevelCount ?? 4;
   const programByCode = new Map(programs.map((p) => [p.code, p]));
-  const sectionByName = new Map(sections.map((s) => [s.name, s]));
+  const sectionByKey = new Map(sections.map((s) => [`${s.programId}|${s.yearLevel}|${s.name}`, s]));
   const byNumber = new Map(existing.map((s) => [s.studentNumber, s]));
   const byKey = new Map<string, string[]>();
   const byLoose = new Map<string, string[]>();
@@ -116,8 +116,11 @@ export async function analyzeCsv(academicYearId: string, csv: string) {
     if (!values.yearLevel) errors.push('Year level is missing.');
     else if (!Number.isInteger(yearLevel) || yearLevel < 1 || yearLevel > maxYear) errors.push(`Year level must be from 1 to ${maxYear}.`);
 
-    const section = values.section ? sectionByName.get(values.section.toUpperCase()) : undefined;
-    if (values.section && !section) errors.push(`Unknown section "${values.section}". Add it in Settings first.`);
+    // sections belong to one program and year level
+    const section = values.section && program ? sectionByKey.get(`${program.id}|${yearLevel}|${values.section.toUpperCase()}`) : undefined;
+    if (values.section && program && Number.isInteger(yearLevel) && !section) {
+      errors.push(`${program.code} year ${yearLevel} has no section "${values.section}". Add it in Settings first.`);
+    }
     else if (section && !section.isActive) errors.push(`Section ${section.name} is deactivated.`);
 
     const email = values.email.toLowerCase();

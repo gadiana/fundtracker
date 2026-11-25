@@ -532,22 +532,28 @@ model Program {
   academicYear AcademicYear  @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
   students     Student[]
   funds        FundProgram[]
+  sections     Section[]
 
   @@unique([academicYearId, code])
   @@unique([id, academicYearId])
   @@map("programs")
 }
 
+/// A section belongs to one program and one year level, so each program names its own sections
+/// per year (BSIT 1st year: A, B, C; BSCS 3rd year: A only).
 model Section {
   id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   academicYearId String  @map("academic_year_id") @db.Uuid
+  programId      String  @map("program_id") @db.Uuid
+  yearLevel      Int     @map("year_level") @db.SmallInt
   name           String  @db.VarChar(20)
   isActive       Boolean @default(true) @map("is_active")
 
   academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  program      Program      @relation(fields: [programId, academicYearId], references: [id, academicYearId], onDelete: Restrict)
   students     Student[]
 
-  @@unique([academicYearId, name])
+  @@unique([academicYearId, programId, yearLevel, name])
   @@unique([id, academicYearId])
   @@map("sections")
 }

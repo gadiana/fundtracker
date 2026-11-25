@@ -43,7 +43,7 @@ historyRouter.get('/options', async (req, res) => {
   }
   const [programs, sections, staff, funds, settings] = await Promise.all([
     prisma.program.findMany({ where: { academicYearId: ay.id }, orderBy: { code: 'asc' } }),
-    prisma.section.findMany({ where: { academicYearId: ay.id }, orderBy: { name: 'asc' } }),
+    prisma.section.findMany({ where: { academicYearId: ay.id }, orderBy: [{ yearLevel: 'asc' }, { name: 'asc' }] }),
     canCollect
       ? prisma.$queryRaw<{ id: string; name: string }[]>`
           SELECT DISTINCT p.processed_by AS id, p.processed_by_name AS name FROM payments p
@@ -57,7 +57,7 @@ historyRouter.get('/options', async (req, res) => {
     canSeeUsage,
     yearLevelCount: settings?.yearLevelCount ?? 4,
     programs: programs.map((p) => ({ id: p.id, code: p.code })),
-    sections: sections.map((s) => ({ id: s.id, name: s.name })),
+    sections: sections.map((s) => ({ id: s.id, name: s.name, programId: s.programId, yearLevel: s.yearLevel })),
     staff,
     funds: funds.map((f) => ({ id: f.id, name: f.name })),
   });

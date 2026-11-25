@@ -149,10 +149,26 @@ describe('programs, sections and positions', () => {
     expectStatus(await adviser.delete(`/programs/${unused.id}`), 204);
   });
 
-  it('manages sections', async () => {
-    const a = expectStatus(await adviser.post('/sections', { name: 'a' }), 201).body;
-    expect(a.name).toBe('A');
-    expect((await adviser.post('/sections', { name: 'A' })).body.error.code).toBe('DUPLICATE');
+  it('manages sections per program and year level', async () => {
+    const bsit = expectStatus(await adviser.post('/programs', { code: 'BSIT', name: 'Information Technology' }), 201).body;
+    const bscs = expectStatus(await adviser.post('/programs', { code: 'BSCS', name: 'Computer Science' }), 201).body;
+    const a = expectStatus(await adviser.post('/sections', { programId: bsit.id, yearLevel: 1, name: 'a' }), 201).body;
+    expect(a).toMatchObject({ name: 'A', programId: bsit.id, yearLevel: 1 });
+    expect((await adviser.post('/sections', { programId: bsit.id, yearLevel: 1, name: 'A' })).body.error.code).toBe('DUPLICATE');
+    // the same name is fine in another year or another program
+    expectStatus(await adviser.post('/sections', { programId: bsit.id, yearLevel: 2, name: 'A' }), 201);
+    expectStatus(await adviser.post('/sections', { programId: bscs.id, yearLevel: 1, name: 'A' }), 201);
+    expect((await adviser.post('/sections', { programId: bsit.id, yearLevel: 9, name: 'B' })).body.error.code).toBe('INVALID_YEAR_LEVEL');
+
+    // a student's section must match their program and year level
+    const res = await adviser.post('/students', { studentNumber: '1001', firstName: 'Ana', lastName: 'Cruz', programId: bscs.id, yearLevel: 1, sectionId: a.id });
+    expect(res.body.error.code).toBe('INVALID_SECTION');
+
+    // the log reads as a sentence
+    const log = (await adviser.get('/audit?entityType=section')).body.items;
+    expect(log.map((e: { summary: string }) => e.summary)).toContain('Test User added section A to BSIT 1st year');
+    expect(JSON.stringify(log)).not.toContain(bsit.id);
+
     expectStatus(await adviser.delete(`/sections/${a.id}`), 204);
   });
 

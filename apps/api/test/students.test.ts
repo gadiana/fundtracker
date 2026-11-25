@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { AcademicYear, Program, Section } from '@prisma/client';
 import { prisma } from '../src/db';
-import { createProgram, createSection } from './fixtures';
+import { createProgram, createSection, sectionFor } from './fixtures';
 import { Client, createAy, expectStatus, registerAndLogin, resetDb, type Client as ClientType } from './helpers';
 
 let ay: AcademicYear;
@@ -23,7 +23,7 @@ beforeEach(async () => {
   const created = await createAy(2026);
   ay = created.ay;
   bsit = await createProgram(ay.id, 'BSIT');
-  sectionA = await createSection(ay.id, 'A');
+  sectionA = await createSection(ay.id, 'A', bsit.id, 1);
   adviser = await registerAndLogin('adviser@test.ph', undefined, ['Maria', 'Santos']);
   collector = await approve('collector@test.ph', created.designations.collector.id, ['Carlo', 'Reyes']);
   president = await approve('president@test.ph', created.designations.president.id, ['Paolo', 'Lim']);
@@ -169,7 +169,7 @@ describe('editing and status', () => {
     });
     expect((await collector.get('/students?flag=needs_confirmation')).body.items).toHaveLength(1);
 
-    const res = expectStatus(await collector.post(`/students/${s.id}/confirm-profile`, { programId: bsit.id, yearLevel: 3, sectionId: sectionA.id }), 200);
+    const res = expectStatus(await collector.post(`/students/${s.id}/confirm-profile`, { programId: bsit.id, yearLevel: 3, sectionId: (await sectionFor(ay.id, bsit.id, 3)).id }), 200);
     expect(res.body).toMatchObject({ needsProfileConfirmation: false, yearLevel: 3, profileConfirmedByName: 'Carlo Reyes' });
     expect((await collector.post(`/students/${s.id}/confirm-profile`, { programId: bsit.id, yearLevel: 3 })).body.error.code).toBe('ALREADY_CONFIRMED');
   });

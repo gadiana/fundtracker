@@ -75,7 +75,8 @@ describe('Copy Wizard', () => {
 
     const bsit = await createProgram(source.id, 'BSIT');
     const bscs = await createProgram(source.id, 'BSCS');
-    const sectionA = await createSection(source.id, 'A');
+    const sectionA = await createSection(source.id, 'A', bsit.id, 1);
+    await createSection(source.id, 'A', bsit.id, 2);
     const studentFee = await createFund(source.id, { name: 'Student Fee', amount: 50_000, priority: 1 });
     const palaro = await createFund(source.id, { name: 'Palaro', amount: 10_000, priority: 2, yearLevels: [1, 2], programIds: [bsit.id] });
 
@@ -134,7 +135,7 @@ describe('Copy Wizard', () => {
     expect(await prisma.aySetting.findUniqueOrThrow({ where: { academicYearId: T } })).toMatchObject({ orgName: BRANDING.orgName, schoolAbbr: BRANDING.schoolAbbr });
     const targetBsit = await prisma.program.findFirstOrThrow({ where: { academicYearId: T, code: 'BSIT' } });
     expect(targetBsit.id).not.toBe(bsit.id);
-    expect(await prisma.section.count({ where: { academicYearId: T } })).toBe(1);
+    expect(await prisma.section.count({ where: { academicYearId: T } })).toBe(2);
 
     // people: same accounts, new memberships with positions of the new AY
     const memberships = await prisma.userAyRole.findMany({ where: { academicYearId: T }, include: { designation: true } });
