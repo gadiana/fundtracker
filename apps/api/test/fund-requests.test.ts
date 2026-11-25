@@ -378,18 +378,20 @@ describe('liquidation receipts', () => {
     expect(await prisma.liquidationReceipt.count()).toBe(0);
   });
 
-  it('takes expenses without a receipt (gas, fares) with no receipt number or photo', async () => {
+  it('takes other expenses without a receipt (gas, fares): just items and costs, no photo', async () => {
     const id = await approved(500_00);
     const body = {
       receipts: [
         { usedFor: 'Booth', receiptNo: 'OR-1', receiptDate: manilaDate(0), items: [{ description: 'Tarp', quantity: 1, unitCost: 200_00 }], attachmentIds: [await upload(president)] },
         {
-          usedFor: 'Gas for picking up the tarp',
+          usedFor: 'Other expenses (no receipt)',
           hasReceipt: false,
-          payee: 'Tricycle driver',
           receiptNo: 'ignored',
           receiptDate: manilaDate(0),
-          items: [{ description: 'Fare, round trip', quantity: 2, unitCost: 25_00 }],
+          items: [
+            { description: 'Gas', quantity: 1, unitCost: 30_00 },
+            { description: 'Tricycle fare', quantity: 1, unitCost: 20_00 },
+          ],
           attachmentIds: [],
         },
       ],
@@ -399,7 +401,16 @@ describe('liquidation receipts', () => {
     const l = (await adviser.get(`/fund-requests/${id}`)).body.request.liquidations[0];
     expect(l.fundUsed).toBe(250_00);
     expect(l.receipts[0]).toMatchObject({ ref: 'R-1', hasReceipt: true, receiptNo: 'OR-1' });
-    expect(l.receipts[1]).toMatchObject({ ref: 'R-2', hasReceipt: false, receiptNo: null, payee: 'Tricycle driver', total: 50_00, attachments: [] });
+    expect(l.receipts[1]).toMatchObject({ ref: 'Other', hasReceipt: false, receiptNo: null, total: 50_00, attachments: [] });
+
+    // the printed liquidation lists them by item and cost only
+    const doc = expectStatus(await president.get(`/reports/liquidation?requestId=${id}`), 200).body;
+    const other = doc.tables.find((t: { title: string }) => t.title === 'Other expenses (no receipt)');
+    expect(other.columns.map((c: { label: string }) => c.label)).toEqual(['Item', 'Cost']);
+    expect(other.rows).toEqual([
+      { description: 'Gas', amount: 30_00 },
+      { description: 'Tricycle fare', amount: 20_00 },
+    ]);
   });
 
   it('lets a revision reuse the files sent the first time, but not files of another request', async () => {

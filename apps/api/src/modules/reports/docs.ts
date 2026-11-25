@@ -601,8 +601,8 @@ export async function liquidationReport(ctx: ReportContext, requestId: string): 
           { key: 'total', label: 'Total', type: 'money' },
         ],
         rows: entries.map((e) => ({
-          ref: receiptRef(e.sortOrder),
-          receiptDate: day(e.receiptDate),
+          ref: e.hasReceipt ? receiptRef(e.sortOrder) : 'Other',
+          receiptDate: e.hasReceipt ? day(e.receiptDate) : null,
           receiptNo: e.hasReceipt ? e.receiptNo : 'No receipt',
           payee: e.payee,
           usedFor: e.usedFor,
@@ -612,21 +612,32 @@ export async function liquidationReport(ctx: ReportContext, requestId: string): 
         totals: { ref: 'Total', total: used },
         emptyText: 'No receipts.',
       },
-      ...entries.map(
-        (e): ReportTable => ({
-          title: [`${receiptRef(e.sortOrder)} · ${e.usedFor}`, e.payee, e.hasReceipt ? e.receiptNo && `OR ${e.receiptNo}` : 'no receipt', formatReportCell(day(e.receiptDate), 'date', ctx.settings.timezone)]
-            .filter(Boolean)
-            .join(' · '),
-          columns: [
-            { key: 'n', label: '#', type: 'number' },
-            { key: 'description', label: 'Item' },
-            { key: 'quantity', label: 'Qty', type: 'number' },
-            { key: 'unitCost', label: 'Unit cost', type: 'money' },
-            { key: 'amount', label: 'Amount', type: 'money' },
-          ],
-          rows: e.items.map((i) => ({ n: i.sortOrder, description: i.description, quantity: i.quantity, unitCost: Number(i.unitCost), amount: Number(i.amount) })),
-          totals: { description: `${receiptRef(e.sortOrder)} total`, amount: Number(e.total) },
-        }),
+      ...entries.map((e): ReportTable =>
+        !e.hasReceipt
+          ? {
+              // costs without a receipt (gas, fares, ...): just the item and its cost
+              title: 'Other expenses (no receipt)',
+              columns: [
+                { key: 'description', label: 'Item' },
+                { key: 'amount', label: 'Cost', type: 'money' },
+              ],
+              rows: e.items.map((i) => ({ description: i.description, amount: Number(i.amount) })),
+              totals: { description: 'Other expenses total', amount: Number(e.total) },
+            }
+          : {
+              title: [`${receiptRef(e.sortOrder)} · ${e.usedFor}`, e.payee, e.receiptNo && `OR ${e.receiptNo}`, formatReportCell(day(e.receiptDate), 'date', ctx.settings.timezone)]
+                .filter(Boolean)
+                .join(' · '),
+              columns: [
+                { key: 'n', label: '#', type: 'number' },
+                { key: 'description', label: 'Item' },
+                { key: 'quantity', label: 'Qty', type: 'number' },
+                { key: 'unitCost', label: 'Unit cost', type: 'money' },
+                { key: 'amount', label: 'Amount', type: 'money' },
+              ],
+              rows: e.items.map((i) => ({ n: i.sortOrder, description: i.description, quantity: i.quantity, unitCost: Number(i.unitCost), amount: Number(i.amount) })),
+              totals: { description: `${receiptRef(e.sortOrder)} total`, amount: Number(e.total) },
+            },
       ),
     ],
     notes: [
@@ -649,7 +660,7 @@ export async function liquidationReport(ctx: ReportContext, requestId: string): 
           .filter((e) => e.attachments.length)
           .map((e) => ({
             ref: receiptRef(e.sortOrder),
-            caption: [e.usedFor, e.payee, e.hasReceipt ? e.receiptNo && `OR ${e.receiptNo}` : 'no receipt', formatReportCell(day(e.receiptDate), 'date', ctx.settings.timezone), `PHP ${centavosPlain(Number(e.total))}`]
+            caption: [e.usedFor, e.payee, e.receiptNo && `OR ${e.receiptNo}`, formatReportCell(day(e.receiptDate), 'date', ctx.settings.timezone), `PHP ${centavosPlain(Number(e.total))}`]
               .filter(Boolean)
               .join(' · '),
             files: e.attachments.map((a) => ({ url: `/api/files/${a.file.id}`, name: a.file.originalName, mimeType: a.file.mimeType })),
