@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react';
-import { Link, useParams } from 'react-router';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Archive, ArchiveRestore, ArrowLeft, Check, ExternalLink, FileText, HandCoins, Lock, Paperclip, ReceiptText, X } from 'lucide-react';
 import type { LiquidationCreateInput } from '@sft/shared';
@@ -39,6 +39,19 @@ export function RequestDetailPage({ mode = 'request' }: { mode?: 'request' | 'li
   // when more was used than approved: does the fund reimburse the excess, or does the requestor absorb it?
   const [overChoice, setOverChoice] = useState<'' | 'reimburse' | 'absorb'>('');
   const [proof, setProof] = useState<AttachedFile[]>([]);
+  const [params, setParams] = useSearchParams();
+
+  // "Mark as reimbursed" on the Reimbursements page opens the settlement dialog right away
+  const data = view.data;
+  useEffect(() => {
+    if (!data || params.get('settle') !== '1') return;
+    const last = data.request.liquidations.at(-1);
+    if (data.viewer.canSettle && last?.status === 'approved' && last.settlement) {
+      setProof([]);
+      setAction('settle');
+    }
+    setParams({}, { replace: true });
+  }, [data, params, setParams]);
 
   if (view.isLoading) {
     return (

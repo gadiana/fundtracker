@@ -1,5 +1,6 @@
 import { Link, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import { Archive, FilePlus2, Inbox, Lock, type LucideIcon } from 'lucide-react';
 import { Alert, Badge, Card, EmptyState, PageHeader, Spinner, cx } from '../../components/ui';
 import { api, describeError } from '../../lib/api';
@@ -23,7 +24,8 @@ export function useRequestCounts() {
   const { ay, isActiveMember } = useAuth();
   return useQuery({
     queryKey: ['fund-requests', ay?.id, 'counts'],
-    queryFn: () => api<{ toApprove: number; requests: number; liquidations: number; toLiquidate: number }>('/fund-requests/counts', { background: true }),
+    queryFn: () =>
+      api<{ toApprove: number; requests: number; liquidations: number; reimbursements: number; toLiquidate: number }>('/fund-requests/counts', { background: true }),
     refetchInterval: 60_000,
     enabled: Boolean(ay) && isActiveMember,
   });
@@ -111,6 +113,7 @@ export function RequestList({
   emptyTitle,
   emptyBody,
   hint,
+  action,
 }: {
   list: { isLoading: boolean; error: unknown; data?: { items: FundRequestRow[] } };
   to: (r: FundRequestRow) => string;
@@ -118,8 +121,16 @@ export function RequestList({
   emptyTitle: string;
   emptyBody?: string;
   /** an extra badge for a row, e.g. that it still needs a liquidation */
-  hint?: (r: FundRequestRow) => string | null;
+  hint?: (r: FundRequestRow) => string | { text: string; tone: 'amber' | 'green' } | null;
+  /** a button beside the row, e.g. "Mark as reimbursed" */
+  action?: (r: FundRequestRow) => ReactNode;
 }) {
+  const badge = (r: FundRequestRow) => {
+    const h = hint?.(r);
+    if (!h) return null;
+    const { text, tone } = typeof h === 'string' ? { text: h, tone: 'amber' as const } : h;
+    return <Badge tone={tone}>{text}</Badge>;
+  };
   return (
     <Card>
       {list.isLoading ? (
@@ -135,8 +146,8 @@ export function RequestList({
       ) : (
         <ul className="divide-y divide-slate-100">
           {list.data.items.map((r) => (
-            <li key={r.id}>
-              <Link to={to(r)} className="grid gap-2 px-4 py-3 hover:bg-slate-50 sm:grid-cols-[1fr_auto] sm:items-center">
+            <li key={r.id} className="flex flex-col sm:flex-row sm:items-center">
+              <Link to={to(r)} className="grid min-w-0 flex-1 gap-2 px-4 py-3 hover:bg-slate-50 sm:grid-cols-[1fr_auto] sm:items-center">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-xs text-slate-500">{r.requestNo}</span>
@@ -144,7 +155,7 @@ export function RequestList({
                     {r.isConfidential && <Lock className="size-3.5 text-slate-400" aria-label="Confidential" />}
                     <Badge tone={REQUEST_STATUS_TONE[r.status]}>{r.statusLabel}</Badge>
                     {r.needsMyAction && <Badge tone="red">Needs your decision</Badge>}
-                    {hint?.(r) && <Badge tone="amber">{hint(r)}</Badge>}
+                    {badge(r)}
                   </div>
                   <p className="mt-0.5 truncate text-sm text-slate-600">{r.purpose}</p>
                   <p className="text-xs text-slate-500">
@@ -156,6 +167,7 @@ export function RequestList({
                   {r.fundUsed !== null && <p className="text-xs text-slate-500">used {formatMoney(r.fundUsed)}</p>}
                 </div>
               </Link>
+              {action?.(r) && <div className="px-4 pb-3 sm:py-3 sm:pl-0">{action(r)}</div>}
             </li>
           ))}
         </ul>
