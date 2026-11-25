@@ -7,7 +7,7 @@ import { badRequest, conflict, forbidden } from '../../lib/http';
 import { invalidateSecurityCache } from '../../lib/settings';
 import { requireAuth } from '../../middleware/auth';
 import { ayContext, ctxOf, requireAdviser, requireOpenAy } from '../../middleware/ay';
-import { reportLogoFileIds } from '../reports/formats';
+import { reportFormats, reportLogoFileIds } from '../reports/formats';
 import { notificationSettingsRouter } from './notifications';
 import { changedFields, SECURITY_KEYS, serializeSettings, storedPublicFields } from './service';
 
@@ -67,7 +67,8 @@ settingsRouter.patch('/', requireOpenAy, async (req, res) => {
     throw conflict('TWO_FACTOR_NOT_SET_UP', 'Turn on two-factor sign-in for your own account first (Profile → Two-factor sign-in), then require it for everyone.');
   }
 
-  const diff = changedFields(before as unknown as Record<string, unknown>, data);
+  // report formats are compared as they were in use (a report never saved uses its default)
+  const diff = changedFields({ ...before, reportFormats: reportFormats(before) } as unknown as Record<string, unknown>, data);
   if (diff.changed.length === 0) {
     res.json(serializeSettings(before));
     return;

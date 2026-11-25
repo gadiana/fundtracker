@@ -1,6 +1,7 @@
 import type { AuditLog, Prisma } from '@prisma/client';
-import { formatCentavos, formatPersonName } from '@sft/shared';
+import { REPORT_TITLES, formatCentavos, formatPersonName } from '@sft/shared';
 import { prisma } from '../../db';
+import { defaultReportFormat } from '../reports/formats';
 
 /**
  * Turns audit log rows into plain sentences for the adviser ("Juan Dela Cruz added section A
@@ -121,9 +122,137 @@ function changes(before: Data, after: Data) {
   const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((k) => !HIDDEN.test(k));
   return keys
     .filter((k) => k in after && JSON.stringify(before[k] ?? null) !== JSON.stringify(after[k] ?? null))
-    .map((k) => (k in before ? `${labelOf(k)}: ${show(k, before[k])} → ${show(k, after[k])}` : `${labelOf(k)}: ${show(k, after[k])}`));
+    .flatMap((k) =>
+      // report formats are spelled out per report; other fields are one "Label: old → new" line
+      k === 'reportFormats'
+        ? reportFormatChanges(before[k], after[k])
+        : k in before
+          ? `${labelOf(k)}: ${show(k, before[k])} → ${show(k, after[k])}`
+          : `${labelOf(k)}: ${show(k, after[k])}`,
+    );
 }
 
+// ───────────── report formats (Settings → Reports) ─────────────
+
+const PAPER: Record<string, string> = { A4: 'A4', LETTER: 'Letter', LEGAL: 'Legal' };
+const ALIGN: Record<string, string> = { left: 'left', center: 'centered', right: 'right' };
+const list = (v: unknown): Data[] => (Array.isArray(v) ? v.filter((x): x is Data => Boolean(x) && typeof x === 'object') : []);
+const quote = (v: unknown) => `"${String(v ?? '')}"`;
+const signatory = (s: Data) => `${String(s.label || '(no label)')}: ${s.name ? String(s.name) : 'whoever prints it'}${s.position ? ` (${String(s.position)})` : ''}`;
+/** JSON with sorted keys: the database stores JSON objects with its own key order. */
+const stable = (v: unknown): string =>
+  Array.isArray(v) ? `[${v.map(stable).join(',')}]` : v && typeof v === 'object' ? `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${stable((v as Data)[k])}`).join(',')}}` : JSON.stringify(v ?? null);
+const sameList = (a: unknown, b: unknown) => stable(a) === stable(b);
+
+/** A header line's style changes: bold, size, alignment. */
+function lineStyle(before: Data, after: Data) {
+  const out: string[] = [];
+  if (Boolean(before.bold) !== Boolean(after.bold)) out.push(after.bold ? 'made bold' : 'made not bold');
+  if (before.size !== after.size) out.push(`size ${String(before.size)} pt → ${String(after.size)} pt`);
+  if (before.align !== after.align) out.push(`${ALIGN[String(before.align)] ?? String(before.align)} → ${ALIGN[String(after.align)] ?? String(after.align)}`);
+  return out;
+}
+
+function logoChanges(side: string, before: unknown, after: unknown) {
+  const b = (Array.isArray(before) ? before : []).map(String);
+  const a = (Array.isArray(after) ? after : []).map(String);
+  if (sameList(a, b)) return [];
+  const name = (l: string) => (l === 'org' ? 'the organization logo' : 'a logo');
+  const out = [...a.filter((l) => !b.includes(l)).map((l) => `added ${name(l)} on the ${side}`), ...b.filter((l) => !a.includes(l)).map((l) => `removed ${name(l)} from the ${side}`)];
+  if (!out.length) out.push(`changed the order of the logos on the ${side}`);
+  return out;
+}
+
+function headerChanges(before: unknown, after: unknown) {
+  const b = list(before);
+  const a = list(after);
+  if (sameList(a, b)) return [];
+  const out: string[] = [];
+  if (a.length === b.length) {
+    // same number of lines: compare them one by one
+    a.forEach((line, i) => {
+      const old = b[i]!;
+      if (old.text !== line.text) out.push(`header line ${i + 1}: ${quote(old.text)} → ${quote(line.text)}`);
+      const style = lineStyle(old, line);
+      if (style.length) out.push(`header line ${quote(line.text)}: ${style.join(', ')}`);
+    });
+    return out;
+  }
+  for (const line of a) {
+    const old = b.find((x) => x.text === line.text);
+    if (!old) out.push(`added header line ${quote(line.text)}`);
+    else if (lineStyle(old, line).length) out.push(`header line ${quote(line.text)}: ${lineStyle(old, line).join(', ')}`);
+  }
+  for (const line of b) if (!a.some((x) => x.text === line.text)) out.push(`removed header line ${quote(line.text)}`);
+  if (!out.length) out.push('changed the order of the header lines');
+  return out;
+}
+
+function signatoryChanges(before: unknown, after: unknown) {
+  const b = list(before);
+  const a = list(after);
+  if (sameList(a, b)) return [];
+  const out: string[] = [];
+  const shown = (s: Data, old: Data) => (Boolean(s.show) !== Boolean(old.show) ? [`${signatory(s)}: ${s.show ? 'now shown on the report' : 'hidden from the report'}`] : []);
+  if (a.length === b.length) {
+    a.forEach((s, i) => {
+      const old = b[i]!;
+      if (old.label !== s.label || old.name !== s.name || old.position !== s.position) out.push(`signatory ${signatory(old)} → ${signatory(s)}`);
+      out.push(...shown(s, old));
+    });
+  } else {
+    const key = (s: Data) => `${String(s.label)}|${String(s.name)}|${String(s.position)}`;
+    for (const s of a) {
+      const old = b.find((x) => key(x) === key(s));
+      if (!old) out.push(`added signatory ${signatory(s)}${s.show ? '' : ' (hidden)'}`);
+      else out.push(...shown(s, old));
+    }
+    for (const s of b) if (!a.some((x) => key(x) === key(s))) out.push(`removed signatory ${signatory(s)}`);
+  }
+  if (!out.length) out.push('changed the order of the signatories');
+  return out;
+}
+
+/** One report's format in a few words, when there is nothing to compare it with. */
+function formatSummary(f: Data) {
+  const count = (v: unknown) => (Array.isArray(v) ? v.length : 0);
+  const lines = list(f.headerLines).filter((l) => l.text);
+  const sigs = list(f.signatories);
+  return [
+    `paper size ${PAPER[String(f.paperSize)] ?? String(f.paperSize)}`,
+    `logos: ${count(f.logosLeft)} on the left, ${count(f.logosRight)} on the right`,
+    `header: ${lines.length ? lines.map((l) => quote(l.text)).join(', ') : 'none'}`,
+    `signatories: ${sigs.length ? sigs.map((s) => `${signatory(s)}${s.show ? '' : ' (hidden)'}`).join('; ') : 'none'}`,
+  ];
+}
+
+/** What changed in each report's format, as "Collection report: paper size A4 → Legal" lines. */
+function reportFormatChanges(before: unknown, after: unknown): string[] {
+  const b = obj(before as Prisma.JsonValue);
+  const a = obj(after as Prisma.JsonValue);
+  const out: string[] = [];
+  for (const kind of Object.keys(a)) {
+    const next = obj(a[kind] as Prisma.JsonValue);
+    const name = REPORT_TITLES[kind as keyof typeof REPORT_TITLES] ?? words(kind);
+    if (!(kind in b)) {
+      // logged before the old format was recorded: show the new one
+      out.push(...formatSummary(next).map((l) => `${name}: ${l}`));
+      continue;
+    }
+    const prev = obj(b[kind] as Prisma.JsonValue);
+    if (sameList(prev, next)) continue;
+    const lines = [
+      ...(prev.paperSize !== next.paperSize ? [`paper size ${PAPER[String(prev.paperSize)] ?? String(prev.paperSize)} → ${PAPER[String(next.paperSize)] ?? String(next.paperSize)}`] : []),
+      ...logoChanges('left', prev.logosLeft, next.logosLeft),
+      ...logoChanges('right', prev.logosRight, next.logosRight),
+      ...(prev.logoSize !== next.logoSize ? [`logo size ${String(prev.logoSize)} pt → ${String(next.logoSize)} pt`] : []),
+      ...headerChanges(prev.headerLines, next.headerLines),
+      ...signatoryChanges(prev.signatories, next.signatories),
+    ];
+    out.push(...lines.map((l) => `${name}: ${l}`));
+  }
+  return out;
+}
 /** The shown fields of a new or removed record, as "Label: value" lines. */
 function fields(data: Data, only?: string[]) {
   return Object.keys(data)
@@ -158,7 +287,29 @@ async function lookups(rows: AuditLog[]) {
 
 // ───────────── sentences ─────────────
 
-export async function describeAudit(rows: AuditLog[]): Promise<Described[]> {
+/**
+ * Report format changes logged before the old format was recorded in full have an empty
+ * "before" for reports that were never saved: those reports were using their default.
+ */
+async function withDefaultFormats(rows: AuditLog[]) {
+  const needs = rows.filter((r) => r.entityType === 'settings' && r.academicYearId && 'reportFormats' in obj(r.afterData));
+  if (!needs.length) return rows;
+  const settings = await prisma.aySetting.findMany({ where: { academicYearId: { in: [...new Set(needs.map((r) => r.academicYearId!))] } } });
+  const byAy = new Map(settings.map((s) => [s.academicYearId, s]));
+  return rows.map((r) => {
+    const s = r.academicYearId ? byAy.get(r.academicYearId) : undefined;
+    if (!needs.includes(r) || !s) return r;
+    const before = obj(r.beforeData);
+    const formats = obj((before.reportFormats ?? null) as Prisma.JsonValue);
+    const filled = Object.fromEntries(
+      Object.keys(obj(obj(r.afterData).reportFormats as Prisma.JsonValue)).map((kind) => [kind, formats[kind] ?? defaultReportFormat(kind as never, s)]),
+    );
+    return { ...r, beforeData: { ...before, reportFormats: filled } as Prisma.JsonValue };
+  });
+}
+
+export async function describeAudit(logged: AuditLog[]): Promise<Described[]> {
+  const rows = await withDefaultFormats(logged);
   const names = await lookups(rows);
   return rows.map((r) => {
     try {
