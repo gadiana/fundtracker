@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Pencil, Printer, Scale } from 'lucide-react';
+import { ArrowLeft, Pencil, Plus, Printer, Scale } from 'lucide-react';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { describeSync, FundEditorModal } from '../../components/FundEditorModal';
 import { MoneyInput } from '../../components/MoneyInput';
@@ -31,6 +31,8 @@ export function FundDetailPage() {
   const fund = useQuery({ queryKey: ['funds', ay?.id, id], queryFn: () => api<Fund>(`/funds/${id}`) });
   const ledger = useQuery({ queryKey: ['funds', ay?.id, id, 'ledger'], queryFn: () => api<{ items: LedgerEntry[]; balance: number }>(`/funds/${id}/ledger`) });
   const [editing, setEditing] = useState(false);
+  const [addingAnother, setAddingAnother] = useState(false);
+  const navigate = useNavigate();
   const [toggling, setToggling] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
   const [adjustment, setAdjustment] = useState<{ amount: number | null; reason: string }>({ amount: null, reason: '' });
@@ -107,6 +109,11 @@ export function FundDetailPage() {
               <Button variant="secondary" onClick={() => setEditing(true)} disabled={!meta.data}>
                 <Pencil className="size-4" aria-hidden /> Edit
               </Button>
+              {f.amountLocked && f.isActive && (
+                <Button variant="secondary" onClick={() => setAddingAnother(true)} disabled={!meta.data} title="The amount of this fund is locked; collect more with another fund">
+                  <Plus className="size-4" aria-hidden /> Add another fund
+                </Button>
+              )}
               <Button variant="secondary" onClick={() => setAdjusting(true)}>
                 <Scale className="size-4" aria-hidden /> Adjustment
               </Button>
@@ -176,6 +183,22 @@ export function FundDetailPage() {
             setEditing(false);
             await refresh();
             toast(`${saved.name} saved: ${describeSync(charges)}.`);
+          }}
+          onAddAnother={() => {
+            setEditing(false);
+            setAddingAnother(true);
+          }}
+        />
+      )}
+      {addingAnother && meta.data && (
+        <FundEditorModal
+          meta={meta.data}
+          onClose={() => setAddingAnother(false)}
+          onSaved={async (created, charges) => {
+            setAddingAnother(false);
+            await queryClient.invalidateQueries({ queryKey: ['funds'] });
+            toast(`${created.name} created: ${describeSync(charges)}.`);
+            navigate(`/funds/${created.id}`);
           }}
         />
       )}
