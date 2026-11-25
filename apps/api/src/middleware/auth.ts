@@ -32,7 +32,8 @@ export const requireAuth: RequestHandler = async (req, _res, next) => {
   const now = new Date();
   if (now.getTime() - session.lastSeenAt.getTime() > TOUCH_INTERVAL_MS) {
     await prisma.userSession.update({ where: { id: session.id }, data: { lastSeenAt: now } });
-    await touchVisit(session.userId, session.id, now);
+    // sign-in activity is bookkeeping: if it fails, the request still goes through
+    await touchVisit(session.userId, session.id, now).catch((err) => console.error('[presence] could not record the visit', err));
   }
 
   req.user = session.user;

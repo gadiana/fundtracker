@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { prisma } from '../src/db';
-import { describeDevice, visitEnd } from '../src/lib/presence';
+import { describeDevice, touchVisit, visitEnd } from '../src/lib/presence';
 import { createAy, expectStatus, registerAndLogin, resetDb, type Client } from './helpers';
 
 let adviser: Client;
@@ -25,6 +25,16 @@ describe('sessions without an idle timeout', () => {
     // the earlier visit ended when they went quiet; the new one is open
     expect(visitEnd(visits[0]!)).toEqual(hoursAgo);
     expect(visitEnd(visits[1]!)).toBeNull();
+  });
+
+  it('handles two requests at the same moment, even when one found a visit started a moment later', async () => {
+    const session = await prisma.userSession.findFirstOrThrow({ where: { revokedAt: null } });
+    const visit = await prisma.userVisit.findFirstOrThrow({ where: { sessionId: session.id } });
+    // this request's clock reading is 3 ms before the visit another request just started
+    await touchVisit(session.userId, session.id, new Date(visit.startedAt.getTime() - 3));
+    const after = await prisma.userVisit.findUniqueOrThrow({ where: { id: visit.id } });
+    expect(after.lastSeenAt).toEqual(visit.lastSeenAt);
+    expect(await prisma.userVisit.count({ where: { sessionId: session.id } })).toBe(1);
   });
 
   it('ends the visit on logout', async () => {
