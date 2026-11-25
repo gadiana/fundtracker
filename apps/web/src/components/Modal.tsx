@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cx } from './ui';
+import { lockScroll } from '../lib/scrollLock';
 
 /** A larger dialog for multi-step flows (e.g. the Copy Wizard). Simple yes/no actions use ConfirmDialog. */
 export function Modal({
@@ -28,8 +29,7 @@ export function Modal({
 
   useEffect(() => {
     if (!open) return;
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlock = lockScroll();
     const previouslyFocused = document.activeElement as HTMLElement | null;
     requestAnimationFrame(() => panelRef.current?.focus());
     const onKey = (e: KeyboardEvent) => {
@@ -37,7 +37,7 @@ export function Modal({
     };
     window.addEventListener('keydown', onKey);
     return () => {
-      document.body.style.overflow = overflow;
+      unlock();
       window.removeEventListener('keydown', onKey);
       previouslyFocused?.focus?.();
     };

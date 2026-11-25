@@ -36,6 +36,7 @@ import { useRequestCounts } from '../pages/requests/RequestsPage';
 import { Avatar } from './Avatar';
 import { NotificationBell } from './notifications';
 import { PageHeader, Select, Spinner, cx } from './ui';
+import { lockScroll } from '../lib/scrollLock';
 
 // rarely needed, so loaded only when shown
 const CopyWizard = lazy(async () => ({ default: (await import('./CopyWizard')).CopyWizard }));
@@ -241,12 +242,11 @@ export function AppShell() {
   // while the phone menu is open: the page behind doesn't scroll, and Escape closes it
   useEffect(() => {
     if (!drawerOpen) return;
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlock = lockScroll();
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setDrawerOpen(false);
     document.addEventListener('keydown', onKey);
     return () => {
-      document.body.style.overflow = overflow;
+      unlock();
       document.removeEventListener('keydown', onKey);
     };
   }, [drawerOpen]);
@@ -326,7 +326,7 @@ export function AppShell() {
       <div className="mt-4 px-1">
         <AySwitcher />
       </div>
-      <div className="mt-6 min-h-0 flex-1 overflow-y-auto">{navigation}</div>
+      <div className="no-scrollbar mt-6 min-h-0 flex-1 overflow-y-auto">{navigation}</div>
     </>
   );
 

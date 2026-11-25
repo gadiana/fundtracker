@@ -45,6 +45,14 @@ body {
   scrollbar-width: thin;
 }
 
+/* a scroller without a visible scrollbar (the side menu): it still scrolls by wheel, touch and keys */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* switching themes: colors ease over instead of jumping (not while the page loads) */
 :root.theme-changing,
 :root.theme-changing * {
