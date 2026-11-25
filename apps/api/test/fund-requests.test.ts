@@ -515,6 +515,25 @@ describe('the to-approve count', () => {
     expectStatus(await president.post(`/fund-requests/${a.id}/liquidations`, oneReceipt(900, [await upload(president)])), 201);
     expect(await counts(adviser)).toBe(2); // the receipt is waiting now
   });
+
+  it('splits what waits between Fund requests and Liquidations, and lists each stage on its own page', async () => {
+    const a = expectStatus(await fileRequest(president, 1_000), 201).body;
+    const b = expectStatus(await fileRequest(president, 2_000), 201).body;
+    const counts = async (c: Client) => expectStatus(await c.get('/fund-requests/counts'), 200).body;
+    expect(await counts(president)).toMatchObject({ requests: 0, liquidations: 0, toLiquidate: 0 });
+
+    expectStatus(await adviser.post(`/fund-requests/${a.id}/approve`), 200);
+    expect(await counts(president)).toMatchObject({ toLiquidate: 1 }); // approved: the requestor liquidates it
+    expectStatus(await president.post(`/fund-requests/${a.id}/liquidations`, oneReceipt(900, [await upload(president)])), 201);
+    expect(await counts(president)).toMatchObject({ toLiquidate: 0 });
+    expect(await counts(adviser)).toMatchObject({ toApprove: 2, requests: 1, liquidations: 1 });
+
+    const ids = async (c: Client, query: string) => expectStatus(await c.get(`/fund-requests?${query}`), 200).body.items.map((r: { id: string }) => r.id);
+    expect(await ids(adviser, 'scope=inbox&stage=request')).toEqual([b.id]);
+    expect(await ids(adviser, 'scope=inbox&stage=liquidation')).toEqual([a.id]);
+    expect(await ids(president, 'scope=mine&stage=liquidation')).toEqual([a.id]); // the pending one isn't liquidated yet
+    expect((await ids(president, 'scope=mine')).sort()).toEqual([a.id, b.id].sort());
+  });
 });
 
 describe('archiving', () => {

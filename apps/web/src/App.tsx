@@ -43,6 +43,8 @@ const HistoryPage = page(() => import('./pages/reports/HistoryPage'), 'HistoryPa
 const ReportPrintPage = page(() => import('./pages/reports/ReportPrintPage'), 'ReportPrintPage');
 const ReportsPage = page(() => import('./pages/reports/ReportsPage'), 'ReportsPage');
 const AttachmentViewerPage = page(() => import('./pages/requests/AttachmentViewerPage'), 'AttachmentViewerPage');
+const LiquidationDetailPage = page(() => import('./pages/requests/RequestDetailPage'), 'LiquidationDetailPage');
+const LiquidationsPage = page(() => import('./pages/requests/LiquidationsPage'), 'LiquidationsPage');
 const NewRequestPage = page(() => import('./pages/requests/NewRequestPage'), 'NewRequestPage');
 const RequestDetailPage = page(() => import('./pages/requests/RequestDetailPage'), 'RequestDetailPage');
 const RequestsPage = page(() => import('./pages/requests/RequestsPage'), 'RequestsPage');
@@ -123,6 +125,8 @@ const router = createBrowserRouter([
       { path: 'requests', element: <RequestsPage /> },
       { path: 'requests/new', element: <RequirePermission permission="file_requests"><NewRequestPage /></RequirePermission> },
       { path: 'requests/:id', element: <RequestDetailPage /> },
+      { path: 'liquidations', element: <LiquidationsPage /> },
+      { path: 'liquidations/:id', element: <LiquidationDetailPage /> },
       { path: 'funds', element: <RequirePermission permission="view_funds"><FundsPage /></RequirePermission> },
       { path: 'funds/:id', element: <RequirePermission permission="view_funds"><FundDetailPage /></RequirePermission> },
       { path: 'students', element: <RequirePermission permission="collect"><StudentsPage /></RequirePermission> },

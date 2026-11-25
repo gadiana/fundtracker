@@ -16,6 +16,7 @@ import {
   Monitor,
   Moon,
   Printer,
+  ReceiptText,
   ScrollText,
   Settings as SettingsIcon,
   Sun,
@@ -54,6 +55,7 @@ const NAV: { label?: string; items: NavItem[] }[] = [
       { to: '/collection', label: 'Collection', icon: Banknote, permission: 'collect' },
       { to: '/funds', label: 'Funds', icon: Wallet, permission: 'view_funds' },
       { to: '/requests', label: 'Fund requests', icon: FileText },
+      { to: '/liquidations', label: 'Liquidations', icon: ReceiptText },
     ],
   },
   {
@@ -254,7 +256,9 @@ export function AppShell() {
   // an AY that requires two-factor sign-in shows only the setup until it's done (the API refuses the rest)
   const needsTwoFactor = Boolean(ay?.membership && ay.twoFactorMode === 'required' && !me?.user.twoFactorEnabled);
   const unreadCount = unread.data?.count ?? 0;
-  const toApprove = useRequestCounts().data?.toApprove ?? 0;
+  const counts = useRequestCounts().data;
+  // the red number beside a menu item: what waits for this user there
+  const badges: Record<string, number> = { '/requests': counts?.requests ?? 0, '/liquidations': (counts?.liquidations ?? 0) + (counts?.toLiquidate ?? 0) };
   const setupAvailable = canRunSetup(me, ay);
   const showWizard = Boolean(ay) && setupAvailable && (wizardRequested || !wizardDismissed.includes(ay!.id));
   const closeWizard = () => {
@@ -296,9 +300,9 @@ export function AppShell() {
                 >
                   <Icon className="size-4.5 shrink-0" aria-hidden />
                   <span className="flex-1">{label}</span>
-                  {to === '/requests' && toApprove > 0 && (
-                    <span className="min-w-5 rounded-full bg-red-600 px-1.5 text-center text-[11px] font-semibold leading-5 text-white" aria-label={`${toApprove} to approve`}>
-                      {toApprove}
+                  {(badges[to] ?? 0) > 0 && (
+                    <span className="min-w-5 rounded-full bg-red-600 px-1.5 text-center text-[11px] font-semibold leading-5 text-white" aria-label={`${badges[to]} waiting`}>
+                      {badges[to]}
                     </span>
                   )}
                 </NavLink>

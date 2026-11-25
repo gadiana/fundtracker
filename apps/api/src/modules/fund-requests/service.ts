@@ -217,7 +217,8 @@ export async function tellPeople(academicYearId: string, people: Recipient[], ke
     ayId: academicYearId,
     to: people,
     vars: { ...requestVars(r), ...vars },
-    linkPath: `/requests/${r.id}`,
+    // receipt events open the request's Liquidation page
+    linkPath: key.startsWith('liquidation.') ? `/liquidations/${r.id}` : `/requests/${r.id}`,
     entityType: 'fund_request',
     entityId: r.id,
   });
